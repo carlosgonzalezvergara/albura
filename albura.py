@@ -371,20 +371,20 @@ with main_c1:
         
         if pred_type == "Predicative": 
             c1, c2 = st.columns([2, 1])
-            nucleus_data['text'] = c1.text_input("", key="nuc_txt")
-            nucleus_data['pos'] = c2.text_input("Cat.", key="nuc_pos")
+            nucleus_data['text'] = c1.text_input("Data", key="nuc_txt")
+            nucleus_data['pos'] = c2.text_input("PoS", key="nuc_pos")
             p_type_key = 'verbal'
         else:
             st.markdown("**AUX (Copula)**")
             c1, c2 = st.columns([2, 1])
-            copula_data['text'] = c1.text_input("", key="aux_txt")
-            copula_data['pos'] = c2.text_input("Cat.", key="aux_pos")
+            copula_data['text'] = c1.text_input("Data", key="aux_txt")
+            copula_data['pos'] = c2.text_input("PoS", key="aux_pos")
             
             st.markdown("---")
             st.markdown("**PRED (Attribute)**")
             c3, c4 = st.columns([2, 1])
-            attribute_data['text'] = c3.text_input("", key="attr_txt")
-            attribute_data['pos'] = c4.text_input("Cat.", key="attr_pos")
+            attribute_data['text'] = c3.text_input("Data", key="attr_txt")
+            attribute_data['pos'] = c4.text_input("PoS", key="attr_pos")
             
             # SECTION: Elements between AUX and PRED
             st.markdown("---")
@@ -408,8 +408,8 @@ with main_c1:
                     code, def_lbl = conn_map[conn_type_raw]
                     c1, c2, c3 = st.columns([1, 2, 1])
                     lbl = c1.text_input("Label", value=def_lbl, key=f"betw_l_{i}")
-                    txt = c2.text_input("", key=f"betw_t_{i}")
-                    pos = c3.text_input("Cat.", key=f"betw_p_{i}")
+                    txt = c2.text_input("Data", key=f"betw_t_{i}")
+                    pos = c3.text_input("PoS", key=f"betw_p_{i}")
                     items_between_data.append({
                         'label': lbl,
                         'text': txt,
@@ -430,7 +430,7 @@ with main_c1:
             code, def_lbl = conn_map[conn_type_raw]
             c1, c2, c3 = st.columns([1, 2, 1])
             lbl = c1.text_input("Label", value=def_lbl, key=f"pre_l_{i}_{code}")
-            txt = c2.text_input("", key=f"pre_t_{i}"); pos = c3.text_input("Cat.", key=f"pre_p_{i}")
+            txt = c2.text_input("Data", key=f"pre_t_{i}"); pos = c3.text_input("PoS", key=f"pre_p_{i}")
             items_pre_data.append({'label': lbl, 'text': txt, 'pos': pos, 'conn_type': code})
             
         st.caption("Post-nuclear")
@@ -442,7 +442,7 @@ with main_c1:
             code, def_lbl = conn_map[conn_type_raw]
             c1, c2, c3 = st.columns([1, 2, 1])
             lbl = c1.text_input("Label", value=def_lbl, key=f"post_l_{i}_{code}")
-            txt = c2.text_input("", key=f"post_t_{i}"); pos = c3.text_input("Cat.", key=f"post_p_{i}")
+            txt = c2.text_input("Data", key=f"post_t_{i}"); pos = c3.text_input("PoS", key=f"post_p_{i}")
             items_post_data.append({'label': lbl, 'text': txt, 'pos': pos, 'conn_type': code})
 
     with st.expander("3. Topics and foci"):
@@ -450,17 +450,23 @@ with main_c1:
             st.markdown(f"**{label_ui}**")
             c1, c2, c3 = st.columns([1, 2, 1])
             lbl = c1.text_input("Label", default_lbl, key=f"{key_prefix}_lbl")
-            txt = c2.text_input("", key=f"{key_prefix}_txt"); pos = c3.text_input("Cat.", key=f"{key_prefix}_pos")
+            txt = c2.text_input("Data", key=f"{key_prefix}_txt"); pos = c3.text_input("PoS", key=f"{key_prefix}_pos")
             return {'label': lbl, 'text': txt, 'pos': pos}
         prcs = input_peri("PrCS", "prcs", "XP"); pocs = input_peri("PoCS", "pocs", "XP")
         prdp = input_peri("PrDP", "prdp", "XP"); podp = input_peri("PoDP", "podp", "XP")
     
     st.markdown("---")
     st.caption("by Carlos González Vergara (__cgonzalv@uc.cl__)")
+    
+    # CC BY License - Clickable image
+    with open("cc_by_icon.png", "rb") as f:
+        import base64
+        img_data = base64.b64encode(f.read()).decode()
+    
     st.markdown(
-        '<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">'
-        '<img src="cc_by_icon.png" alt="CC BY 4.0" width="88">'
-        '</a>',
+        f'<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">'
+        f'<img src="data:image/png;base64,{img_data}" alt="CC BY 4.0" width="88">'
+        f'</a>',
         unsafe_allow_html=True
     )
 
@@ -519,4 +525,4 @@ with main_c2:
             """
             components.html(html_content, height=640, scrolling=False)
         except Exception as e: st.error(f"Technical error: {e}")
-    else: st.info("👈 Fill in the data to begin.")
+    else: st.info("Fill in the data to begin")
