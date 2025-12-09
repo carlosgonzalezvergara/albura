@@ -425,18 +425,27 @@ with main_c2:
             'items_post': items_post_data, 'pocs': pocs, 'podp': podp
         }
         graph = draw_lsc_tree(data)
+        
         try:
+            # --- 1. GENERACIÓN PARA DESCARGA (ALTA CALIDAD) ---
+            # Forzamos 300 DPI temporalmente para que el PNG salga nítido
+            graph.attr(dpi='300')
             png_data = graph.pipe(format='png')
+            
+            # Botones
             btn_col1, btn_col2, btn_col3 = st.columns([0.12, 0.76, 0.12])
             with btn_col1:
                 st.download_button("Download", png_data, "albura_tree.png", "image/png", use_container_width=True)
             with btn_col3:
-                # El botón incrementa el contador, renovando las keys de los inputs
                 st.button("New", use_container_width=True, on_click=reset_state, help="Generate new diagram")
             
+            # --- 2. GENERACIÓN PARA PANTALLA (WEB OPTIMIZADA) ---
+            # Bajamos a 72 DPI para que las coordenadas del SVG no sean gigantes
+            # Esto evita el problema del "zoom a la letra S"
+            graph.attr(dpi='72')
             svg_code = graph.pipe(format='svg').decode('utf-8')
             
-            # Limpieza del SVG para hacerlo responsive
+            # Limpieza adicional para hacer el SVG responsive (fluido)
             svg_code = re.sub(r'(width|height)="[^"]*"', '', svg_code)
             
             html_content = f"""
@@ -451,5 +460,6 @@ with main_c2:
             </div>
             """
             components.html(html_content, height=640, scrolling=False)
+            
         except Exception as e: st.error(f"Technical error: {e}")
     else: st.info("Fill in the data to begin")
