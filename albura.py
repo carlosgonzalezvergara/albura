@@ -2,7 +2,7 @@ import streamlit as st
 import graphviz
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Albura (Final Architecture)", layout="wide")
+st.set_page_config(page_title="Albura - RRG tree diagram assistant", layout="wide")
 
 # --- DRAWING FUNCTION ---
 def draw_lsc_tree(data):
@@ -505,16 +505,17 @@ with main_c2:
                     st.rerun()
             
             svg_code = graph.pipe(format='svg').decode('utf-8')
+            
+            # Remove fixed width/height from SVG to make it responsive
+            import re
+            svg_code = re.sub(r'width="[\d.]+pt"', '', svg_code)
+            svg_code = re.sub(r'height="[\d.]+pt"', '', svg_code)
+            svg_code = re.sub(r'<svg', '<svg style="max-width: 100%; height: auto;"', svg_code)
+            
             html_content = f"""
             <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; background-color: white; box-sizing: border-box;">
-                <div style="width: 100%; height: 600px; overflow: auto; display: flex; justify-content: center; align-items: center;">
+                <div style="width: 100%; height: 600px; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding-top: 20px;">
                     <style>
-                        svg {{ 
-                            max-height: 100%; 
-                            max-width: 100%; 
-                            height: auto !important; 
-                            width: auto !important; 
-                        }} 
                         text {{ 
                             font-family: Helvetica, Arial, sans-serif !important; 
                         }}
