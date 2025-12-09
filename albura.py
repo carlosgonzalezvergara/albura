@@ -1,6 +1,7 @@
 import streamlit as st
 import graphviz
 import streamlit.components.v1 as components
+import re # Importamos re al inicio para usarlo después
 
 st.set_page_config(page_title="Albura - RRG tree diagram assistant", layout="wide")
 
@@ -33,7 +34,8 @@ def draw_lsc_tree(data):
     dot = graphviz.Digraph(comment='LSC')
     
     # GRAPHIC SETTINGS
-    dot.attr(dpi='300')
+    # ### CAMBIO IMPORTANTE 1: Bajamos DPI a 72 para evitar imágenes gigantes en web
+    dot.attr(dpi='72') 
     dot.attr(splines='line', nodesep='0.4', ranksep='0.5', margin='0') 
     dot.attr('node', fontname='Helvetica', fontsize='11', height='0.2', width='0.2')
     dot.attr('edge', fontname='Helvetica', arrowhead='none', penwidth='0.8')
@@ -41,14 +43,13 @@ def draw_lsc_tree(data):
     # --------------------------------------------------------
     # ALIGNMENT LIST MANAGEMENT (SANDWICH STRATEGY)
     # --------------------------------------------------------
-    # We divide the lists to force order: PRE + CENTER + POST
     
     # CLAUSE
     layer_cl = {'pre': [], 'center': ['CL'], 'post': []}
     # CORE
     layer_core = {'pre': [], 'center': ['CORE'], 'post': []}
     # NUCLEUS
-    layer_nuc = {'pre': [], 'center': [], 'post': []} # Center is filled if there's a NUC
+    layer_nuc = {'pre': [], 'center': [], 'post': []} 
     
     terminal_words = []
     ordered_bottom = []
@@ -116,8 +117,6 @@ def draw_lsc_tree(data):
                 dot.node(top_id, item['label'], shape='plaintext', group=uid)
                 dot.edge('CORE:s', f'{top_id}:n', weight='1')
                 
-                # Arguments always go in the NUC layer.
-                # If PRE, it goes to the PRE list of NUC. If POST, to the POST list.
                 if side_prefix == 'Pre':
                     layer_nuc['pre'].append(top_id)
                 else:
@@ -130,14 +129,13 @@ def draw_lsc_tree(data):
             else:
                 if conn_type == last_conn_type and current_peri_parent:
                     parent_id = current_peri_parent
-                    uid_for_group = f"{side_prefix}_{i}"  # New uid for this item
+                    uid_for_group = f"{side_prefix}_{i}"
                 else:
                     parent_id = f"PERI_Group_{uid}"
                     dot.node(parent_id, "PERIPHERY", shape='plaintext', group=uid)
                     uid_for_group = uid
                     
                     target_layer_id = ''
-                    # We assign to the specific list (Pre or Post) of the correct layer
                     if conn_type == 'Peri-Clause': 
                         target_layer_id = 'CL'
                         if side_prefix == 'Pre': layer_cl['pre'].append(parent_id)
@@ -152,7 +150,6 @@ def draw_lsc_tree(data):
                         else: layer_nuc['post'].append(parent_id)
                     
                     src, tgt = (':e', ':w') if side_prefix == 'Pre' else (':w', ':e')
-                    # Lateral arrow
                     dot.edge(f'{parent_id}{src}', f'{target_layer_id}{tgt}', arrowhead='normal', constraint='false', minlen='1')
                     
                     last_conn_type = conn_type; current_peri_parent = parent_id
@@ -179,7 +176,7 @@ def draw_lsc_tree(data):
     # ========================================================
     has_nuc = (pred_type == 'verbal' and nuc_word) or (pred_type == 'copular' and attr_word)
     if has_nuc:
-        layer_nuc['center'].append('NUC') # We register that NUC goes to center
+        layer_nuc['center'].append('NUC')
         dot.node('NUC', 'NUC', shape='plaintext', group='main')
         dot.edge('CORE:s', 'NUC:n', weight='100') 
         
@@ -195,18 +192,14 @@ def draw_lsc_tree(data):
             terminal_words.append('NucW'); ordered_bottom.append('NucW')
             
         elif pred_type == 'copular':
-            # List to maintain horizontal order at nucleus level
             nuc_level_order = []
             
             if cop_word:
-                # AUX Group
                 dot.node('AUX', 'AUX', shape='plaintext', fontsize='10', group='aux_group')
                 dot.node('AuxW', cop_word, shape='none', group='aux_group')
                 dot.edge('NUC:s', 'AUX:n', weight='1')
                 nuc_level_order.append('AUX')
                 
-                # ORDER TRICK: Invisibly connect the last PRE-NUC periphery with AUX
-                # to ensure AUX is to the right of the periphery.
                 if layer_nuc['pre']:
                     last_pre_nuc = layer_nuc['pre'][-1]
                     dot.edge(last_pre_nuc, 'AUX', style='invis', weight='5')
@@ -218,7 +211,6 @@ def draw_lsc_tree(data):
                     dot.edge('AUX:s', 'AuxW:n', weight='100')
                 terminal_words.append('AuxW'); ordered_bottom.append('AuxW')
             
-            # PROCESSING ELEMENTS BETWEEN AUX AND PRED
             if items_between:
                 last_conn_type_between = None
                 current_peri_parent_between = None
@@ -228,7 +220,6 @@ def draw_lsc_tree(data):
                     uid = f"Between_{i}"
                     conn_type = item['conn_type']
                     
-                    # --- ARGUMENT BETWEEN AUX-PRED ---
                     if conn_type == 'Arg':
                         last_conn_type_between = None
                         current_peri_parent_between = None
@@ -236,23 +227,20 @@ def draw_lsc_tree(data):
                         dot.node(top_id, item['label'], shape='plaintext', group=uid)
                         dot.edge('CORE:s', f'{top_id}:n', weight='1')
                         layer_nuc['center'].append(top_id)
-                        nuc_level_order.append(top_id)  # For horizontal order
+                        nuc_level_order.append(top_id)
                         wid = draw_word_structure(top_id, item, uid)
                         terminal_words.append(wid)
                         ordered_bottom.append(wid)
                     
-                    # --- PERIPHERY BETWEEN AUX-PRED ---
                     else:
                         if conn_type == last_conn_type_between and current_peri_parent_between:
                             parent_id = current_peri_parent_between
-                            uid_for_group = f"Between_{i}"  # New uid for this item
+                            uid_for_group = f"Between_{i}"
                         else:
                             parent_id = f"PERI_Between_{uid}"
                             dot.node(parent_id, "PERIPHERY", shape='plaintext', group=uid)
                             uid_for_group = uid
                             
-                            # Peripheries between AUX-PRED connect to the appropriate level
-                            # and are added to the 'center' list of the corresponding level
                             if conn_type == 'Peri-Clause':
                                 target_layer_id = 'CL'
                                 layer_cl['center'].append(parent_id)
@@ -266,7 +254,7 @@ def draw_lsc_tree(data):
                             elif conn_type == 'Peri-Nuc':
                                 target_layer_id = 'NUC'
                                 layer_nuc['center'].append(parent_id)
-                                nuc_level_order.append(parent_id)  # For horizontal order
+                                nuc_level_order.append(parent_id)
                                 dot.edge(f'{parent_id}:w', f'{target_layer_id}:e', 
                                         arrowhead='normal', constraint='false', minlen='1')
                             
@@ -283,7 +271,7 @@ def draw_lsc_tree(data):
             dot.node('PRED_A', 'PRED', shape='plaintext', fontsize='10', group='pred_attr')
             dot.node('AttrW', attr_word, shape='none', group='pred_attr')
             dot.edge('NUC:s', 'PRED_A:n', weight='100')
-            nuc_level_order.append('PRED_A')  # For horizontal order
+            nuc_level_order.append('PRED_A')
             
             if attr_pos:
                 dot.node('AttrP', attr_pos, shape='plaintext', fontsize='10', group='pred_attr')
@@ -292,7 +280,6 @@ def draw_lsc_tree(data):
                 dot.edge('PRED_A:s', 'AttrW:n', weight='100')
             terminal_words.append('AttrW'); ordered_bottom.append('AttrW')
             
-            # Force horizontal order at nucleus level: AUX -> elements -> PRED
             if len(nuc_level_order) > 1:
                 for i in range(len(nuc_level_order) - 1):
                     dot.edge(nuc_level_order[i], nuc_level_order[i+1], style='invis', weight='10')
@@ -310,41 +297,29 @@ def draw_lsc_tree(data):
     w_podp = draw_slot('PoDP', podp, 'S', layer_cl['post'])
     if w_podp: ordered_bottom.append(w_podp)
 
-    # -----------------------------------------------------
-    # ALIGNMENTS (FINAL FIX: EXPLICIT ORDER)
-    # -----------------------------------------------------
-    # This is where the magic happens. We concatenate the lists: [PRE] + [CENTER] + [POST]
-    # And draw the nodes in that order, with invisible links to force horizontal position.
-    
     def enforce_rank(node_list):
         if not node_list: return
         with dot.subgraph() as s:
             s.attr(rank='same')
             for i, node_id in enumerate(node_list):
                 s.node(node_id)
-                # Optional: invisible link to ensure left->right order within same level
                 if i > 0:
                     s.edge(node_list[i-1], node_id, style='invis', weight='5')
 
-    # 1. Clause Level (CL + CL Peripheries)
     full_cl_list = layer_cl['pre'] + layer_cl['center'] + layer_cl['post']
     enforce_rank(full_cl_list)
 
-    # 2. Core Level (CORE + Core Peripheries)
     full_core_list = layer_core['pre'] + layer_core['center'] + layer_core['post']
     enforce_rank(full_core_list)
 
-    # 3. Nucleus Level (NUC + Args + Nuc Peripheries)
     full_nuc_list = layer_nuc['pre'] + layer_nuc['center'] + layer_nuc['post']
     enforce_rank(full_nuc_list)
 
-    # 4. Words
     if terminal_words:
         with dot.subgraph() as s: 
             s.attr(rank='sink')
             for n in terminal_words: s.node(n)
 
-    # Visual word order
     for i in range(len(ordered_bottom) - 1):
         dot.edge(ordered_bottom[i], ordered_bottom[i+1], style='invis', weight='10')
 
@@ -353,7 +328,11 @@ def draw_lsc_tree(data):
 # ==========================================
 # INTERFACE
 # ==========================================
-st.image("albura_logo.png", width=400)
+try:
+    st.image("albura_logo.png", width=400)
+except:
+    st.title("Albura")
+
 st.caption("Assistant for diagramming RRG syntactic trees")
 st.markdown("---")
 
@@ -386,7 +365,6 @@ with main_c1:
             attribute_data['text'] = c3.text_input("Data", key="attr_txt")
             attribute_data['pos'] = c4.text_input("PoS", key="attr_pos")
             
-            # SECTION: Elements between AUX and PRED
             st.markdown("---")
             st.markdown("**Elements between AUX and PRED**")
             num_between = st.number_input("Number of items", min_value=0, value=0, key="num_between")
@@ -459,16 +437,19 @@ with main_c1:
     st.caption("by Carlos González Vergara (__cgonzalv@uc.cl__)")
     
     # CC BY License - Clickable image
-    with open("cc_by_icon.png", "rb") as f:
-        import base64
-        img_data = base64.b64encode(f.read()).decode()
-    
-    st.markdown(
-        f'<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">'
-        f'<img src="data:image/png;base64,{img_data}" alt="CC BY 4.0" width="88">'
-        f'</a>',
-        unsafe_allow_html=True
-    )
+    try:
+        with open("cc_by_icon.png", "rb") as f:
+            import base64
+            img_data = base64.b64encode(f.read()).decode()
+        
+        st.markdown(
+            f'<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">'
+            f'<img src="data:image/png;base64,{img_data}" alt="CC BY 4.0" width="88">'
+            f'</a>',
+            unsafe_allow_html=True
+        )
+    except:
+        st.markdown("[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)")
 
 with main_c2:
     show_graph = False
@@ -506,16 +487,21 @@ with main_c2:
             
             svg_code = graph.pipe(format='svg').decode('utf-8')
             
-            # Remove fixed width/height from SVG to make it responsive
-            import re
-            svg_code = re.sub(r'width="[\d.]+pt"', '', svg_code)
-            svg_code = re.sub(r'height="[\d.]+pt"', '', svg_code)
-            svg_code = re.sub(r'<svg', '<svg style="max-width: 100%; height: auto;"', svg_code)
+            # ### CAMBIO IMPORTANTE 2: Limpieza de atributos fijos del SVG
+            # Esto elimina los width="Xpt" y height="Ypt" que Graphviz pone por defecto
+            # dejando el SVG "puro" para que el CSS de abajo tome el control.
+            svg_code = re.sub(r'(width|height)="[^"]*"', '', svg_code)
             
             html_content = f"""
             <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; background-color: white; box-sizing: border-box;">
-                <div style="width: 100%; height: 600px; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding-top: 20px;">
+                <div style="width: 100%; height: 600px; overflow: auto; display: flex; justify-content: center; align-items: center;">
                     <style>
+                        /* Forzamos al SVG a comportarse de forma responsive */
+                        svg {{
+                            width: 100%;
+                            height: auto;
+                            max-height: 580px;
+                        }}
                         text {{ 
                             font-family: Helvetica, Arial, sans-serif !important; 
                         }}
