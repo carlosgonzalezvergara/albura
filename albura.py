@@ -299,7 +299,8 @@ def draw_lsc_tree(data):
 # INTERFACE
 # ==========================================
 try:
-    st.image("albura_logo.png", width=400)
+    #st.image("albura_logo.png", width=400)
+    st.image("albura_logo.png")
 except:
     st.title("Albura")
 
@@ -330,14 +331,13 @@ with main_c1:
             copula_data['text'] = c1.text_input("Data", key=get_key("aux_txt"))
             copula_data['pos'] = c2.text_input("PoS", key=get_key("aux_pos"))
             
-            st.markdown("---")
             st.markdown("**PRED (Attribute)**")
             c3, c4 = st.columns([2, 1])
             attribute_data['text'] = c3.text_input("Data", key=get_key("attr_txt"))
             attribute_data['pos'] = c4.text_input("PoS", key=get_key("attr_pos"))
             
             st.markdown("---")
-            st.markdown("**Elements between AUX and PRED**")
+            st.markdown("**Optional data between AUX and PRED**")
             num_between = st.number_input("Number of items", min_value=0, value=0, key=get_key("num_between"))
             
             if num_between > 0:
@@ -366,8 +366,10 @@ with main_c1:
             p_type_key = 'copular'
 
     with st.expander("2. Constituents", expanded=False):
-        st.caption("Pre-nuclear")
-        num_pre = st.number_input("Number of items", min_value=0, value=1, key=get_key("num_pre"))
+        st.caption("(from leftmost to rightmost)")
+        
+        st.caption("**Pre-nuclear**")
+        num_pre = st.number_input("Number of items", min_value=0, value=0, key=get_key("num_pre"))
         items_pre_data = []
         for i in range(num_pre):
             st.markdown(f"**Item {i+1}**")
@@ -379,7 +381,9 @@ with main_c1:
             txt = c2.text_input("Data", key=get_key(f"pre_t_{i}")); pos = c3.text_input("PoS", key=get_key(f"pre_p_{i}"))
             items_pre_data.append({'label': lbl, 'text': txt, 'pos': pos, 'conn_type': code})
             
-        st.caption("Post-nuclear")
+        st.markdown("---")
+
+        st.caption("**Post-nuclear**")
         num_post = st.number_input("Number of items", min_value=0, value=0, key=get_key("num_post"))
         items_post_data = []
         for i in range(num_post):
@@ -398,8 +402,17 @@ with main_c1:
             lbl = c1.text_input("Label", default_lbl, key=get_key(f"{key_prefix}_lbl"))
             txt = c2.text_input("Data", key=get_key(f"{key_prefix}_txt")); pos = c3.text_input("PoS", key=get_key(f"{key_prefix}_pos"))
             return {'label': lbl, 'text': txt, 'pos': pos}
-        prcs = input_peri("PrCS", "prcs", "XP"); pocs = input_peri("PoCS", "pocs", "XP")
-        prdp = input_peri("PrDP", "prdp", "XP"); podp = input_peri("PoDP", "podp", "XP")
+
+        # 1. Grupo DP (Detached Positions)
+        prdp = input_peri("PrDP", "prdp", "XP")
+        podp = input_peri("PoDP", "podp", "XP")
+        
+        # Línea separadora
+        st.markdown("---")
+        
+        # 2. Grupo CS (Core Substitutions)
+        prcs = input_peri("PrCS", "prcs", "XP")
+        pocs = input_peri("PoCS", "pocs", "XP")
     
     st.markdown("---")
     st.caption("by Carlos González Vergara (__cgonzalv@uc.cl__)")
