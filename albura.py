@@ -149,7 +149,7 @@ def draw_lsc_tree(data):
                         else: layer_nuc['post'].append(parent_id)
                     
                     src, tgt = (':e', ':w') if side_prefix == 'Pre' else (':w', ':e')
-                    dot.edge(f'{parent_id}{src}', f'{target_layer_id}{tgt}', arrowhead='normal', constraint='false', minlen='1')
+                    dot.edge(f'{parent_id}{src}', f'{target_layer_id}{tgt}', arrowhead='vee', constraint='false', minlen='1')
                     
                     last_conn_type = conn_type; current_peri_parent = parent_id
 
@@ -233,7 +233,7 @@ def draw_lsc_tree(data):
                             elif conn_type == 'Peri-Nuc':
                                 target_layer_id = 'NUC'; layer_nuc['center'].append(parent_id); nuc_level_order.append(parent_id)
                             
-                            dot.edge(f'{parent_id}:w', f'{target_layer_id}:e', arrowhead='normal', constraint='false', minlen='1')
+                            dot.edge(f'{parent_id}:w', f'{target_layer_id}:e', arrowhead='vee', constraint='false', minlen='1')
                             last_conn_type_between = conn_type; current_peri_parent_between = parent_id
                         
                         item_top_id = f"{uid}_Top"
@@ -299,7 +299,6 @@ def draw_lsc_tree(data):
 # INTERFACE
 # ==========================================
 try:
-    #st.image("albura_logo.png", width=400)
     st.image("albura_logo.png")
 except:
     st.title("Albura")
@@ -310,7 +309,7 @@ st.markdown("---")
 main_c1, main_c2 = st.columns([1, 3])
 
 with main_c1:
-    st.subheader("Clause data")
+    st.subheader("LSC data")
     
     with st.expander("1. Nucleus", expanded=False):
         # Usamos get_key para que los campos se reseteen al cambiar el ID
@@ -365,7 +364,7 @@ with main_c1:
             
             p_type_key = 'copular'
 
-    with st.expander("2. Constituents", expanded=False):
+    with st.expander("2. Arguments and adjuncts", expanded=False):
         st.caption("(from leftmost to rightmost)")
         
         st.caption("**Pre-nuclear**")
