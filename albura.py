@@ -141,9 +141,9 @@ def draw_lsc_tree(data):
 
                     side = (ops[i].get("side") or "Right").strip()
 
-                    # minlen progresivo (solo para espaciar visualmente)
+                    # minlen progresivo (suma lineal)
                     base_minlen = 1
-                    increment = 3
+                    increment = 1  # cada unidad ≈ nodesep (0.4 pulgadas ≈ 29px)
                     current_minlen = str(base_minlen + global_op_index[0] * increment)
                     global_op_index[0] += 1
 
@@ -537,12 +537,12 @@ def draw_lsc_tree(data):
 def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
     """
     Post-procesa el SVG para agregar líneas punteadas desde etiquetas de operadores hacia targets.
-    Retorna: (svg_modificado, extra_right) donde extra_right es el espacio adicional necesario a la derecha
+    Retorna: (svg_modificado, extra_left, extra_right) donde extra_left/right son los espacios adicionales necesarios
     """
     import xml.etree.ElementTree as ET
 
     if not connections:
-        return svg_code, 0
+        return svg_code, 0, 0
 
     ET.register_namespace("", "http://www.w3.org/2000/svg")
     ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
@@ -550,7 +550,7 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
     try:
         root = ET.fromstring(svg_code)
     except ET.ParseError:
-        return svg_code, 0
+        return svg_code, 0, 0
 
     def find_node_bbox(node_id):
         for g in root.findall(".//{http://www.w3.org/2000/svg}g[@class='node']"):
@@ -577,18 +577,21 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
     if graph_g is None:
         graph_g = root.find(".//{http://www.w3.org/2000/svg}g")
     if graph_g is None:
-        return svg_code, 0
+        return svg_code, 0, 0
 
     # Obtener viewBox original para calcular límites
     vb = root.get("viewBox")
+    original_min_x = 0
     original_max_x = 0
     if vb:
         parts = vb.strip().split()
         if len(parts) == 4:
             vb_x, vb_y, vb_w, vb_h = map(float, parts)
+            original_min_x = vb_x
             original_max_x = vb_x + vb_w
 
-    # Rastrear el punto más a la derecha de las líneas agregadas
+    # Rastrear los puntos más a la izquierda y derecha de las líneas agregadas
+    min_x_used = original_min_x
     max_x_used = original_max_x
 
     for conn in connections:
@@ -647,7 +650,8 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
         trunk_elem.set("stroke-dasharray", "5,3")
         trunk_elem.set("fill", "none")
 
-        # Actualizar max_x_used
+        # Actualizar min_x_used y max_x_used
+        min_x_used = min(min_x_used, p1_x, p2_x, p3_x)
         max_x_used = max(max_x_used, p1_x, p2_x, p3_x)
 
         spacing = 8
@@ -666,12 +670,14 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
             branch_elem.set("stroke-dasharray", "5,3")
             branch_elem.set("fill", "none")
 
+            min_x_used = min(min_x_used, p4_x)
             max_x_used = max(max_x_used, p4_x)
 
-    # Calcular espacio extra necesario a la derecha
+    # Calcular espacio extra necesario a la izquierda y derecha
+    extra_left = max(0, original_min_x - min_x_used + 20)
     extra_right = max(0, max_x_used - original_max_x + 20)
 
-    return ET.tostring(root, encoding="unicode"), extra_right
+    return ET.tostring(root, encoding="unicode"), extra_left, extra_right
 
 
 def expand_svg_viewbox(svg_code, pad_left=0, pad_right=0, pad_top=0, pad_bottom=0):
@@ -1079,10 +1085,10 @@ with main_c2:
             svg_code = graph.pipe(format="svg").decode("utf-8")
             
             # 2) Post-procesar (agregar líneas punteadas) y obtener espacio extra necesario
-            svg_code, extra_right = postprocess_svg_with_connections(svg_code, pending_connections, node_mapping)
+            svg_code, extra_left, extra_right = postprocess_svg_with_connections(svg_code, pending_connections, node_mapping)
 
             # 3) Expandir viewBox solo lo necesario (con un mínimo de padding)
-            svg_code = expand_svg_viewbox(svg_code, pad_left=10, pad_right=max(10, extra_right), pad_top=10, pad_bottom=10)
+            svg_code = expand_svg_viewbox(svg_code, pad_left=max(10, extra_left), pad_right=max(10, extra_right), pad_top=10, pad_bottom=10)
 
             # 4) Generar PNG desde el SVG final
             png_data = None
