@@ -142,9 +142,9 @@ def draw_lsc_tree(data):
                     side = (ops[i].get("side") or "Right").strip()
 
                     # minlen progresivo (solo para espaciar visualmente)
-                    base_minlen = 2
-                    multiplier = 1.5 ** global_op_index[0]
-                    current_minlen = str(int(base_minlen * multiplier))
+                    base_minlen = 1
+                    increment = 3
+                    current_minlen = str(base_minlen + global_op_index[0] * increment)
                     global_op_index[0] += 1
 
                     with dot.subgraph() as s:
@@ -537,12 +537,12 @@ def draw_lsc_tree(data):
 def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
     """
     Post-procesa el SVG para agregar líneas punteadas desde etiquetas de operadores hacia targets.
-    El trazado es: horizontal desde el costado -> vertical hacia el target -> recto al target
+    Retorna: (svg_modificado, extra_right) donde extra_right es el espacio adicional necesario a la derecha
     """
     import xml.etree.ElementTree as ET
 
     if not connections:
-        return svg_code
+        return svg_code, 0
 
     ET.register_namespace("", "http://www.w3.org/2000/svg")
     ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
@@ -550,7 +550,7 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
     try:
         root = ET.fromstring(svg_code)
     except ET.ParseError:
-        return svg_code
+        return svg_code, 0
 
     def find_node_bbox(node_id):
         for g in root.findall(".//{http://www.w3.org/2000/svg}g[@class='node']"):
@@ -577,7 +577,19 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
     if graph_g is None:
         graph_g = root.find(".//{http://www.w3.org/2000/svg}g")
     if graph_g is None:
-        return svg_code
+        return svg_code, 0
+
+    # Obtener viewBox original para calcular límites
+    vb = root.get("viewBox")
+    original_max_x = 0
+    if vb:
+        parts = vb.strip().split()
+        if len(parts) == 4:
+            vb_x, vb_y, vb_w, vb_h = map(float, parts)
+            original_max_x = vb_x + vb_w
+
+    # Rastrear el punto más a la derecha de las líneas agregadas
+    max_x_used = original_max_x
 
     for conn in connections:
         lbl_id = conn["lbl_id"]
@@ -635,6 +647,9 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
         trunk_elem.set("stroke-dasharray", "5,3")
         trunk_elem.set("fill", "none")
 
+        # Actualizar max_x_used
+        max_x_used = max(max_x_used, p1_x, p2_x, p3_x)
+
         spacing = 8
         for tb in target_bboxes:
             p4_x = tb["cx"]
@@ -651,13 +666,17 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
             branch_elem.set("stroke-dasharray", "5,3")
             branch_elem.set("fill", "none")
 
-    return ET.tostring(root, encoding="unicode")
+            max_x_used = max(max_x_used, p4_x)
+
+    # Calcular espacio extra necesario a la derecha
+    extra_right = max(0, max_x_used - original_max_x + 20)
+
+    return ET.tostring(root, encoding="unicode"), extra_right
 
 
-def expand_svg_viewbox(svg_code, pad_left=40, pad_right=400, pad_top=40, pad_bottom=40):
+def expand_svg_viewbox(svg_code, pad_left=0, pad_right=0, pad_top=0, pad_bottom=0):
     """
-    Expande el viewBox del SVG (y width/height si existen) para evitar que se corten
-    elementos agregados en el postproceso (p. ej., líneas punteadas hacia la derecha).
+    Expande el viewBox del SVG para evitar que se corten elementos.
     """
     import xml.etree.ElementTree as ET
 
@@ -686,20 +705,20 @@ def expand_svg_viewbox(svg_code, pad_left=40, pad_right=400, pad_top=40, pad_bot
 
     root.set("viewBox", f"{new_x:.2f} {new_y:.2f} {new_w:.2f} {new_h:.2f}")
 
-    def _num(val):
-        m = re.match(r"^\s*([0-9.]+)", val or "")
-        return float(m.group(1)) if m else None
-
+    # Actualizar width y height si existen
     w_attr = root.get("width")
     h_attr = root.get("height")
 
-    wn = _num(w_attr)
-    hn = _num(h_attr)
-
-    if wn is not None:
-        root.set("width", f"{wn + pad_left + pad_right:.2f}pt")
-    if hn is not None:
-        root.set("height", f"{hn + pad_top + pad_bottom:.2f}pt")
+    if w_attr:
+        m = re.match(r"^\s*([0-9.]+)", w_attr)
+        if m:
+            wn = float(m.group(1))
+            root.set("width", f"{wn + pad_left + pad_right:.2f}pt")
+    if h_attr:
+        m = re.match(r"^\s*([0-9.]+)", h_attr)
+        if m:
+            hn = float(m.group(1))
+            root.set("height", f"{hn + pad_top + pad_bottom:.2f}pt")
 
     return ET.tostring(root, encoding="unicode")
 
@@ -717,7 +736,7 @@ st.markdown("---")
 
 main_c1, main_c2 = st.columns([1, 3])
 
-# ✅ FIX 1: valor por defecto para evitar NameError
+# Valor por defecto para evitar NameError
 p_type_key = "verbal"
 
 with main_c1:
@@ -1044,7 +1063,7 @@ with main_c2:
 
         graph, pending_connections, node_mapping = draw_lsc_tree(data)
 
-        # Botones SIEMPRE visibles
+        # Botones
         btn_col1, btn_col2, btn_col3 = st.columns([0.12, 0.76, 0.12])
         with btn_col3:
             st.button(
@@ -1055,28 +1074,43 @@ with main_c2:
             )
 
         try:
-            # 1) SVG base + postproceso (líneas punteadas)
+            # 1) Generar SVG base
             graph.attr(dpi="72")
             svg_code = graph.pipe(format="svg").decode("utf-8")
-            svg_code = postprocess_svg_with_connections(svg_code, pending_connections, node_mapping)
+            
+            # 2) Post-procesar (agregar líneas punteadas) y obtener espacio extra necesario
+            svg_code, extra_right = postprocess_svg_with_connections(svg_code, pending_connections, node_mapping)
 
-            # 2) Expandir viewBox para evitar cortes (especialmente a la derecha)
-            svg_code = expand_svg_viewbox(svg_code, pad_left=40, pad_right=400, pad_top=40, pad_bottom=40)
+            # 3) Expandir viewBox solo lo necesario (con un mínimo de padding)
+            svg_code = expand_svg_viewbox(svg_code, pad_left=10, pad_right=max(10, extra_right), pad_top=10, pad_bottom=10)
 
-            # 3) PNG HIRES desde el SVG final
-            import cairosvg
-            png_data = cairosvg.svg2png(bytestring=svg_code.encode("utf-8"), dpi=300)
+            # 4) Generar PNG desde el SVG final
+            png_data = None
+            try:
+                import cairosvg
+                png_data = cairosvg.svg2png(bytestring=svg_code.encode("utf-8"), dpi=300)
+            except ImportError:
+                pass  # cairosvg no disponible
 
             with btn_col1:
-                st.download_button(
-                    "Download",
-                    png_data,
-                    "albura_tree.png",
-                    "image/png",
-                    use_container_width=True,
-                )
+                if png_data:
+                    st.download_button(
+                        "Download",
+                        png_data,
+                        "albura_tree.png",
+                        "image/png",
+                        use_container_width=True,
+                    )
+                else:
+                    st.download_button(
+                        "Download",
+                        svg_code,
+                        "albura_tree.svg",
+                        "image/svg+xml",
+                        use_container_width=True,
+                    )
 
-            # 4) Visualización en pantalla (mismo SVG)
+            # 5) Visualización en pantalla (centrado)
             svg_view = re.sub(r'(width|height)="[^"]*"', "", svg_code)
 
             html_content = f"""
@@ -1088,36 +1122,6 @@ with main_c2:
                             align-items: flex-start; padding-top: 20px;">
                     <style>
                         svg {{
-                            width: 100%;
-                            height: auto;
-                            max-height: 700px;
-                        }}
-                        text {{
-                            font-family: Helvetica, Arial, sans-serif !important;
-                        }}
-                    </style>
-                    {svg_view}
-                </div>
-            </div>
-            """
-            components.html(html_content, height=780, scrolling=False)
-
-        except Exception as e:
-            st.error(f"Technical error (PNG export): {e}")
-
-            # 4) Visualización en pantalla (mismo SVG)
-            svg_view = re.sub(r'(width|height)="[^"]*"', "", svg_code)
-
-            html_content = f"""
-            <div style="border: 1px solid #e0e0e0; border-radius: 8px;
-                        padding: 10px; background-color: white;
-                        box-sizing: border-box;">
-                <div style="width: 100%; height: 700px; overflow: auto;
-                            display: flex; justify-content: center;
-                            align-items: flex-start; padding-top: 20px;">
-                    <style>
-                        svg {{
-                            width: 100%;
                             height: auto;
                             max-height: 700px;
                         }}
