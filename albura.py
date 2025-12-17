@@ -3,7 +3,11 @@ import graphviz
 import streamlit.components.v1 as components
 import re
 
-st.set_page_config(page_title="Albura - RRG LSC Diagram Assistant", layout="wide")
+st.set_page_config(
+    page_title="Albura - RRG LSC Diagram Assistant",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 OP_ABBR = {
     "Aspect": "ASP",
@@ -89,7 +93,7 @@ def draw_lsc_tree(data):
 
     # GRAPH SETTINGS
     dot.attr(dpi="72")
-    dot.attr(splines="line", nodesep="0.4", ranksep="0.5", margin="0")
+    dot.attr(splines="line", nodesep="0.4", ranksep="0.25", margin="0")
     dot.attr("node", fontname="Helvetica", fontsize="11", height="0.2", width="0.2")
     dot.attr("edge", fontname="Helvetica", arrowhead="none", penwidth="0.8")
 
@@ -218,7 +222,7 @@ def draw_lsc_tree(data):
         dot.edge(clause_stack[-1] + ":s", sent_id + ":n", weight="100")
 
     # 3) SLOT DRAWER (PrDP/PrCS/PoCS/PoDP/ExCS)
-    def draw_slot(uid, data_dict, parent, target_list, ref_code=None, show_uid_label=True):
+    def draw_slot(uid, data_dict, parent, target_list, ref_code=None, show_uid_label=True, parent_edge_constraint=True):
         if not data_dict or not data_dict.get("text"):
             return None
 
@@ -229,15 +233,17 @@ def draw_lsc_tree(data):
         if show_uid_label:
             dot.node(uid, uid, shape="plaintext", group=uid)
             dot.edge(f"{parent}:s", f"{uid}:n", weight="1")
-
             dot.node(lbl_id, data_dict.get("label", "XP"), shape="plaintext", group=uid)
             dot.edge(f"{uid}:s", f"{lbl_id}:n", weight="100")
-
             row_node_id = uid
         else:
             dot.node(lbl_id, data_dict.get("label", "XP"), shape="plaintext", group=uid)
-            dot.edge(f"{parent}:s", f"{lbl_id}:n", weight="1")
-
+            dot.edge(
+                f"{parent}:s",
+                f"{lbl_id}:n",
+                weight="1",
+                constraint="true" if parent_edge_constraint else "false",
+            )
             row_node_id = lbl_id
 
         dot.node(w_id, data_dict["text"], shape="none", group=uid)
@@ -307,7 +313,13 @@ def draw_lsc_tree(data):
                 else:
                     parent_anchor = "CORE"
 
-                dot.edge(f"{parent_anchor}:s", f"{top_id}:n", weight="1")
+                # IMPORTANT: do NOT let morphological (AFF/CL) anchors constrain horizontal layout
+                dot.edge(
+                    f"{parent_anchor}:s",
+                    f"{top_id}:n",
+                    weight="1",
+                    constraint="false" if is_morph(item) else "true",
+                )
 
                 # Horizontal ordering:
                 # - Only syntactic args participate in NUC-row ordering
@@ -447,7 +459,10 @@ def draw_lsc_tree(data):
             if cop_word:
                 dot.node("AUX", "AUX", shape="plaintext", fontsize="10", group="aux_group")
                 dot.node("AuxW", cop_word, shape="none", group="aux_group")
-                dot.edge("NUC:s", "AUX:n", weight="1")
+
+                # IMPORTANT: keep AUX connected but do NOT let it pull the horizontal spine
+                dot.edge("NUC:s", "AUX:n", weight="1", constraint="false")
+
                 nuc_level_order.append("AUX")
 
                 if layer_nuc["pre"]:
@@ -499,7 +514,12 @@ def draw_lsc_tree(data):
                         else:
                             parent_anchor = "CORE"
 
-                        dot.edge(f"{parent_anchor}:s", f"{top_id}:n", weight="1")
+                        dot.edge(
+                            f"{parent_anchor}:s",
+                            f"{top_id}:n",
+                            weight="1",
+                            constraint="false" if is_morph(item) else "true",
+                        )
 
                         # ordering only for syntactic args
                         if not is_morph(item):
@@ -661,6 +681,7 @@ def draw_lsc_tree(data):
         else:
             target_list = layer_core["pre"] if pos == "left" else layer_core["post"]
 
+        # IMPORTANT: do not allow the CL→ExCS edge to pull CL/CORE horizontally
         w_excs = draw_slot(
             uid,
             slot,
@@ -668,6 +689,7 @@ def draw_lsc_tree(data):
             target_list=target_list,
             ref_code=f"excs_{i}",
             show_uid_label=False,
+            parent_edge_constraint=False,
         )
         if not w_excs:
             continue
@@ -756,7 +778,7 @@ def draw_lsc_tree(data):
             for n in row_nodes:
                 s.node(n)
             for i in range(1, len(row_nodes)):
-                s.edge(row_nodes[i - 1], row_nodes[i], style="invis", weight="50")
+                s.edge(row_nodes[i - 1], row_nodes[i], style="invis", weight="100")
 
     enforce_rank(_build_row(layer_cl, "CL"))
     enforce_rank(_build_row(layer_core, "CORE"))
@@ -764,16 +786,44 @@ def draw_lsc_tree(data):
     if has_nuc:
         enforce_rank(_build_row(layer_nuc, "NUC"))
 
-    # Align ALL morph arg tops (AFF and CL) with NUCw
+    # Align morph arg tops (AFF/CL) with NUCw,
+    # placing pre-nuclear morphs to the LEFT of NUCw and post-nuclear morphs to the RIGHT.
     if has_nuc and has_morphological and morph_arg_top_nodes:
-        morph_sorted = sorted(_unique(morph_arg_top_nodes), key=_row_index)
+        morph_unique = _unique(morph_arg_top_nodes)
+
+        # anchor_idx already computed above (nucleus position in ordered_bottom)
+        left_morph = [n for n in morph_unique if _row_index(n) < anchor_idx]
+        right_morph = [n for n in morph_unique if _row_index(n) >= anchor_idx]
+
+        left_sorted = sorted(left_morph, key=_row_index)
+        right_sorted = sorted(right_morph, key=_row_index)
+
         with dot.subgraph() as s:
             s.attr(rank="same")
-            s.node("NUCw")
-            for n in morph_sorted:
+
+            for n in left_sorted:
                 s.node(n)
-            for i in range(1, len(morph_sorted)):
-                s.edge(morph_sorted[i - 1], morph_sorted[i], style="invis", weight="50")
+
+            s.node("NUCw")
+
+            for n in right_sorted:
+                s.node(n)
+
+            # keep order among left morphs
+            for i in range(1, len(left_sorted)):
+                s.edge(left_sorted[i - 1], left_sorted[i], style="invis", weight="100")
+
+            # left morphs must end before NUCw
+            if left_sorted:
+                s.edge(left_sorted[-1], "NUCw", style="invis", weight="80", minlen="2")
+
+            # NUCw must come before right morphs
+            if right_sorted:
+                s.edge("NUCw", right_sorted[0], style="invis", weight="80", minlen="2")
+
+            # keep order among right morphs
+            for i in range(1, len(right_sorted)):
+                s.edge(right_sorted[i - 1], right_sorted[i], style="invis", weight="100")
 
     # All words same horizontal baseline
     if terminal_words:
@@ -782,7 +832,7 @@ def draw_lsc_tree(data):
             for n in terminal_words:
                 s.node(n)
 
-    # Keep linear order at bottom
+    # Keep linear order at bottom (this is the main order constraint)
     for i in range(len(ordered_bottom) - 1):
         dot.edge(ordered_bottom[i], ordered_bottom[i + 1], style="invis", weight="10")
 
@@ -871,11 +921,11 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
         p1_y = lbl_bbox["cy"]
 
         if layer == "CLAUSE":
-            distance = 20
-        elif layer == "CORE":
-            distance = 15
-        else:
             distance = 10
+        elif layer == "CORE":
+            distance = 8
+        else:
+            distance = 5
 
         if side == "Left":
             p2_x = p1_x - distance
@@ -898,10 +948,12 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
         min_x_used = min(min_x_used, p1_x, p2_x, p3_x)
         max_x_used = max(max_x_used, p1_x, p2_x, p3_x)
 
-        spacing = 8
         for tb in target_bboxes:
+            # separación extra para que la línea no "toque" visualmente las letras
+            offset = (tb.get("height", 14) * 0.25) + 8  # ajusta el 6 si quieres más/menos aire
+
             p4_x = tb["cx"]
-            p4_y = tb["cy"] + spacing if tb["cy"] < p3_y else tb["cy"] - spacing
+            p4_y = tb["cy"] + offset if tb["cy"] < p3_y else tb["cy"] - offset
 
             branch_d = f"M {p3_x},{p3_y} L {p4_x},{p4_y}"
             branch_elem = ET.SubElement(graph_g, "{http://www.w3.org/2000/svg}path")
@@ -1000,18 +1052,19 @@ with main_c1:
             nucleus_data["pos"] = c2.text_input("PoS", key=get_key("nuc_pos"))
             p_type_key = "verbal"
         else:
-            st.markdown("**AUX (Copula)**")
+            st.markdown("**AUX**")
             c1, c2 = st.columns([2, 1])
             copula_data["text"] = c1.text_input("Data", key=get_key("aux_txt"))
             copula_data["pos"] = c2.text_input("PoS", key=get_key("aux_pos"))
 
-            st.markdown("**PRED (Attribute)**")
+            st.markdown("**PRED**")
             c3, c4 = st.columns([2, 1])
             attribute_data["text"] = c3.text_input("Data", key=get_key("attr_txt"))
             attribute_data["pos"] = c4.text_input("PoS", key=get_key("attr_pos"))
 
             st.markdown("---")
-            st.markdown("**Optional data between AUX and PRED**")
+            st.markdown("**Arguments and adjuncts between AUX and PRED**")
+            st.caption("(from leftmost to rightmost)")
             num_between = st.number_input("Number of items", min_value=0, value=0, key=get_key("num_between"))
 
             if num_between > 0:
@@ -1036,20 +1089,21 @@ with main_c1:
                             key=get_key(f"betw_argtype_{i}")
                         )
 
-                    c1, c2, c3 = st.columns([1, 2, 1])
+                    c1, c2, c3 = st.columns([2, 1, 1])
+
+                    txt = c1.text_input("Data", key=get_key(f"betw_t_{i}"))
 
                     morph_form = None
                     if conn_type_raw == "Argument" and arg_type == "Morphological":
-                        morph_form = c1.selectbox(
+                        morph_form = c2.selectbox(
                             "Label",
                             ["Affix", "Clitic"],
                             key=get_key(f"betw_morphform_{i}")
                         )
                         lbl = "AFF" if morph_form == "Affix" else "CL"
                     else:
-                        lbl = c1.text_input("Label", value=def_lbl, key=get_key(f"betw_l_{i}"))
+                        lbl = c2.text_input("Label", value=def_lbl, key=get_key(f"betw_l_{i}"))
 
-                    txt = c2.text_input("Data", key=get_key(f"betw_t_{i}"))
                     pos = c3.text_input("PoS", key=get_key(f"betw_p_{i}"))
 
                     items_between_data.append({
@@ -1094,20 +1148,21 @@ with main_c1:
                     key=get_key(f"pre_argtype_{i}")
                 )
 
-            c1, c2, c3 = st.columns([1, 2, 1])
+            c1, c2, c3 = st.columns([2, 1, 1])
+
+            txt = c1.text_input("Data", key=get_key(f"pre_t_{i}"))
 
             morph_form = None
             if conn_type_raw == "Argument" and arg_type == "Morphological":
-                morph_form = c1.selectbox(
+                morph_form = c2.selectbox(
                     "Label",
                     ["Affix", "Clitic"],
                     key=get_key(f"pre_morphform_{i}")
                 )
                 lbl = "AFF" if morph_form == "Affix" else "CL"
             else:
-                lbl = c1.text_input("Label", value=def_lbl, key=get_key(f"pre_l_{i}_{code}"))
+                lbl = c2.text_input("Label", value=def_lbl, key=get_key(f"pre_l_{i}_{code}"))
 
-            txt = c2.text_input("Data", key=get_key(f"pre_t_{i}"))
             pos = c3.text_input("PoS", key=get_key(f"pre_p_{i}"))
 
             items_pre_data.append({
@@ -1139,20 +1194,21 @@ with main_c1:
                     key=get_key(f"post_argtype_{i}")
                 )
 
-            c1, c2, c3 = st.columns([1, 2, 1])
+            c1, c2, c3 = st.columns([2, 1, 1])
+
+            txt = c1.text_input("Data", key=get_key(f"post_t_{i}"))
 
             morph_form = None
             if conn_type_raw == "Argument" and arg_type == "Morphological":
-                morph_form = c1.selectbox(
+                morph_form = c2.selectbox(
                     "Label",
                     ["Affix", "Clitic"],
                     key=get_key(f"post_morphform_{i}")
                 )
                 lbl = "AFF" if morph_form == "Affix" else "CL"
             else:
-                lbl = c1.text_input("Label", value=def_lbl, key=get_key(f"post_l_{i}_{code}"))
+                lbl = c2.text_input("Label", value=def_lbl, key=get_key(f"post_l_{i}_{code}"))
 
-            txt = c2.text_input("Data", key=get_key(f"post_t_{i}"))
             pos = c3.text_input("PoS", key=get_key(f"post_p_{i}"))
 
             items_post_data.append({
@@ -1170,9 +1226,9 @@ with main_c1:
     with st.expander("3. Topics and foci", expanded=False):
         def input_peri(label_ui, key_prefix, default_lbl="XP"):
             st.markdown(f"**{label_ui}**")
-            c1, c2, c3 = st.columns([1, 2, 1])
-            lbl = c1.text_input("Label", default_lbl, key=get_key(f"{key_prefix}_lbl"))
-            txt = c2.text_input("Data", key=get_key(f"{key_prefix}_txt"))
+            c1, c2, c3 = st.columns([2, 1, 1])
+            txt = c1.text_input("Data", key=get_key(f"{key_prefix}_txt"))
+            lbl = c2.text_input("Label", default_lbl, key=get_key(f"{key_prefix}_lbl"))
             pos = c3.text_input("PoS", key=get_key(f"{key_prefix}_pos"))
             return {"label": lbl, "text": txt, "pos": pos}
 
@@ -1225,9 +1281,9 @@ with main_c1:
         for i in range(num_excs):
             st.markdown(f"**Item {i+1}**")
 
-            c1, c2, c3 = st.columns([1, 2, 1])
-            lbl = c1.text_input("Label", value="XP", key=get_key(f"excs_l_{i}"))
-            txt = c2.text_input("Data", key=get_key(f"excs_t_{i}"))
+            c1, c2, c3 = st.columns([2, 1, 1])
+            txt = c1.text_input("Data", key=get_key(f"excs_t_{i}"))
+            lbl = c2.text_input("Label", value="XP", key=get_key(f"excs_l_{i}"))
             pos = c3.text_input("PoS", key=get_key(f"excs_p_{i}"))
 
             c4, c5 = st.columns([1, 1])
@@ -1419,6 +1475,12 @@ with main_c1:
     operator_box("Clause", "CLAUSE", ops_clause, "op_clause", realization_forms_data)
 
     st.markdown("---")
+
+    h1, h2 = st.columns([0.9, 0.1])
+    with h1:
+        st.page_link("pages/01_User_Manual.py", label="User Manual", icon="📘")
+
+    st.markdown("---")
     st.caption("by Carlos González Vergara (__cgonzalv@uc.cl__)")
 
     try:
@@ -1468,7 +1530,7 @@ with main_c2:
         with btn_col3:
             st.button(
                 "New",
-                use_container_width=True,
+                width="stretch",
                 on_click=reset_state,
                 help="Generate new diagram",
             )
@@ -1501,7 +1563,7 @@ with main_c2:
                         png_data,
                         "albura_tree.png",
                         "image/png",
-                        use_container_width=True,
+                        width="stretch",
                     )
                 else:
                     st.download_button(
@@ -1509,7 +1571,7 @@ with main_c2:
                         svg_code,
                         "albura_tree.svg",
                         "image/svg+xml",
-                        use_container_width=True,
+                        width="stretch",
                     )
 
             svg_view = re.sub(r'(width|height)="[^"]*"', "", svg_code)
