@@ -17,7 +17,7 @@ OP_ABBR = {
     "Illocutionary force": "IF",
 }
 
-# --- GESTIÓN DE ESTADO (Para que el botón New limpie de verdad) ---
+# --- STATE (for true reset on "New") ---
 if "form_id" not in st.session_state:
     st.session_state["form_id"] = 0
 
@@ -31,7 +31,7 @@ def get_key(base_name):
 
 
 #=====================
-#DRAWING FUNCTION
+# DRAWING FUNCTION
 #=====================
 def draw_lsc_tree(data):
     # Retrieve data
@@ -63,24 +63,37 @@ def draw_lsc_tree(data):
     # Extra-Core Slots
     extra_core_slots = data.get("extra_core_slots", [])
 
-    # --- Detectar si hay argumentos morfológicos (se usa para COREw/NUCw y para el anclaje de args) ---
-    has_morphological_arg = any(
-        item.get("arg_type") == "Morphological"
-        for item in (items_pre + items_post + items_between)
+    def is_morph(item):
+        return item.get("arg_type") == "Morphological"
+
+    def morph_form(item):
+        return (item.get("morph_form") or "").strip()
+
+    def is_affix_morph(item):
+        # legacy empty -> treat as Affix
+        return is_morph(item) and (morph_form(item) == "" or morph_form(item) == "Affix")
+
+    def is_clitic_morph(item):
+        return is_morph(item) and morph_form(item) == "Clitic"
+
+    # Detect if we need COREw/NUCw:
+    # -> should exist whenever there is ANY morphological argument (Affix or Clitic)
+    has_morphological = any(
+        is_morph(item) for item in (items_pre + items_post + items_between)
     )
 
-    # Mapeo de códigos de referencia a IDs de nodos
+    # Map reference codes -> node IDs
     reference_to_node = {}
 
     dot = graphviz.Digraph(comment="LSC")
 
-    # GRAPHIC SETTINGS
+    # GRAPH SETTINGS
     dot.attr(dpi="72")
     dot.attr(splines="line", nodesep="0.4", ranksep="0.5", margin="0")
     dot.attr("node", fontname="Helvetica", fontsize="11", height="0.2", width="0.2")
     dot.attr("edge", fontname="Helvetica", arrowhead="none", penwidth="0.8")
 
-    # ALIGNMENT LISTS (se rellenan, pero el ORDEN FINAL se calcula al final)
+    # ALIGNMENT LISTS (filled during build; final order computed at the end)
     layer_cl = {"pre": [], "center": ["CL"], "post": []}
     layer_core = {"pre": [], "center": ["CORE"], "post": []}
     layer_nuc = {"pre": [], "center": [], "post": []}
@@ -88,17 +101,13 @@ def draw_lsc_tree(data):
     terminal_words = []
     ordered_bottom = []
 
-    # Aquí guardaremos los TOP de argumentos morfológicos para alinearlos con NUCw
+    # Store tops of morph args for alignment with NUCw (includes AFF and CL)
     morph_arg_top_nodes = []
 
-    # ==========================================================
-    # ALIGNMENT FIX (CLAVE):
-    # Mapeo: nodo “de fila” (Label/top/periphery-box) -> word-node (Data)
-    # para ordenar las filas superiores usando el orden real de la oración.
-    # ==========================================================
+    # Row-node -> word-node mapping (for vertical alignment ordering)
     row_node_to_word = {}
 
-    # 1. SPINE STRUCTURE
+    # 1) SPINE
     dot.node("S", "SENTENCE", shape="plaintext", fontname="Helvetica", group="main")
     dot.node("CL", "CLAUSE", shape="plaintext", fontname="Helvetica", group="main")
     dot.node("CORE", "CORE", shape="plaintext", fontname="Helvetica", group="main")
@@ -106,10 +115,11 @@ def draw_lsc_tree(data):
     dot.edge("S:s", "CL:n", weight="100")
     dot.edge("CL:s", "CORE:n", weight="100")
 
-    # 2. HELPER: DRAW WORDS
+    # 2) WORD DRAWER
     def draw_word_structure(parent_id, item, uid):
         word_id = f"{uid}_W"
         dot.node(word_id, item["text"], shape="none", group=uid)
+
         if item.get("pos"):
             pos_id = f"{uid}_P"
             dot.node(pos_id, item["pos"], shape="plaintext", fontsize="10", group=uid)
@@ -117,9 +127,10 @@ def draw_lsc_tree(data):
             dot.edge(f"{pos_id}:s", f"{word_id}:n", weight="100")
         else:
             dot.edge(f"{parent_id}:s", f"{word_id}:n", weight="100")
+
         return word_id
 
-    # Lista para almacenar conexiones de operadores a targets (para post-procesamiento SVG)
+    # For postprocessing SVG dashed operator-links
     pending_op_connections = []
 
     # OPERATORS PROJECTION
@@ -127,7 +138,6 @@ def draw_lsc_tree(data):
         if not operators:
             return
 
-        # Agrupar por layer
         ops_by_layer = {"NUC": [], "CORE": [], "CLAUSE": []}
         for op in operators:
             layer = op.get("layer")
@@ -140,13 +150,11 @@ def draw_lsc_tree(data):
             val = (op.get("value") or "").strip()
             return f"{abbr}: {val}" if val else f"{abbr}"
 
-        # Contador global de operadores para calcular distancia progresiva
         global_op_index = [0]
 
         def build_layer_stack(layer_name):
             stack = []
             ops = ops_by_layer[layer_name]
-
             n = max(1, len(ops))
 
             for i in range(n):
@@ -159,7 +167,6 @@ def draw_lsc_tree(data):
 
                     side = (ops[i].get("side") or "Right").strip()
 
-                    # minlen progresivo (suma lineal)
                     base_minlen = 1
                     increment = 1
                     current_minlen = str(base_minlen + global_op_index[0] * increment)
@@ -179,7 +186,6 @@ def draw_lsc_tree(data):
                     else:
                         dot.edge(f"{lbl_id}:w", f"{layer_id}:e", arrowhead="vee", penwidth="0.8", constraint="false")
 
-                    # Guardar targets para postproceso SVG
                     target_codes = ops[i].get("targets", [])
                     if target_codes:
                         target_node_ids = []
@@ -211,15 +217,14 @@ def draw_lsc_tree(data):
         dot.edge(core_stack[-1] + ":s", clause_stack[0] + ":n", weight="100")
         dot.edge(clause_stack[-1] + ":s", sent_id + ":n", weight="100")
 
-    # 3. HELPER: DRAW SLOTS
+    # 3) SLOT DRAWER (PrDP/PrCS/PoCS/PoDP/ExCS)
     def draw_slot(uid, data_dict, parent, target_list, ref_code=None, show_uid_label=True):
         if not data_dict or not data_dict.get("text"):
             return None
 
         lbl_id = f"{uid}_L"
         w_id = f"{uid}_W"
-
-        row_node_id = None  # ← el nodo que vive en la “fila” (CLAUSE/CORE/NUC)
+        row_node_id = None
 
         if show_uid_label:
             dot.node(uid, uid, shape="plaintext", group=uid)
@@ -230,7 +235,6 @@ def draw_lsc_tree(data):
 
             row_node_id = uid
         else:
-            # NO dibuja el uid (ExCS0). El nodo superior es el Label.
             dot.node(lbl_id, data_dict.get("label", "XP"), shape="plaintext", group=uid)
             dot.edge(f"{parent}:s", f"{lbl_id}:n", weight="1")
 
@@ -251,7 +255,7 @@ def draw_lsc_tree(data):
         if target_list is not None:
             target_list.append(row_node_id)
 
-        # ===== ALIGNMENT FIX: fila -> word (Data) =====
+        # Row -> word alignment mapping
         if row_node_id:
             row_node_to_word[row_node_id] = w_id
 
@@ -260,13 +264,18 @@ def draw_lsc_tree(data):
 
         return w_id
 
-    # --- Helper: decidir anclaje para argumentos (CORE vs COREw) ---
-    def get_argument_anchor(item):
-        if item.get("arg_type") == "Morphological":
-            return "COREw"
-        return "CORE"
+    # ------------- NUCLEUS presence flags -------------
+    has_nuc = (pred_type == "verbal" and nuc_word) or (pred_type == "copular" and attr_word)
 
-    # 4. HELPER: PROCESS ITEMS (pre/post)
+    # Anchor for clitics: PoS under PRED if available, else PRED
+    def get_clitic_anchor_id():
+        if not has_nuc:
+            return "CORE"
+        if pred_type == "verbal":
+            return "NucP" if nuc_pos else "PRED"
+        return "AttrP" if attr_pos else "PRED_A"
+
+    # 4) ITEMS PROCESSOR (pre/post arguments/peripheries)
     def process_item_group(items, side_prefix):
         last_conn_type = None
         current_peri_parent = None
@@ -283,28 +292,40 @@ def draw_lsc_tree(data):
                 current_peri_parent = None
 
                 top_id = f"{uid}_Top"
-                dot.node(top_id, item.get("label", "XP"), shape="plaintext", group=uid)
 
-                is_morph = (item.get("arg_type") == "Morphological")
-                if is_morph:
-                    morph_arg_top_nodes.append(top_id)
+                if is_morph(item):
+                    forced_lbl = "AFF" if is_affix_morph(item) else "CL"
+                    dot.node(top_id, forced_lbl, shape="plaintext", group=uid)
+                else:
+                    dot.node(top_id, item.get("label", "XP"), shape="plaintext", group=uid)
 
-                parent_anchor = get_argument_anchor(item)
+                # Decide anchor
+                if is_clitic_morph(item):
+                    parent_anchor = get_clitic_anchor_id()
+                elif is_morph(item):
+                    parent_anchor = "COREw" if (has_nuc and has_morphological) else "CORE"
+                else:
+                    parent_anchor = "CORE"
+
                 dot.edge(f"{parent_anchor}:s", f"{top_id}:n", weight="1")
 
-                if not is_morph:
+                # Horizontal ordering:
+                # - Only syntactic args participate in NUC-row ordering
+                if not is_morph(item):
                     if side_prefix == "Pre":
                         layer_nuc["pre"].append(top_id)
                     else:
                         layer_nuc["post"].append(top_id)
 
+                # Morph args (AFF and CL) should align with NUCw
+                if is_morph(item):
+                    morph_arg_top_nodes.append(top_id)
+
                 wid = draw_word_structure(top_id, item, uid)
                 terminal_words.append(wid)
                 ordered_bottom.append(wid)
 
-                # ===== ALIGNMENT FIX: top (fila) -> word =====
                 row_node_to_word[top_id] = wid
-
                 reference_to_node[f"{side_prefix.lower()}_{i}"] = wid
 
             else:
@@ -348,13 +369,12 @@ def draw_lsc_tree(data):
                 terminal_words.append(wid)
                 ordered_bottom.append(wid)
 
-                # ===== ALIGNMENT FIX: periphery box (fila) -> first word under it =====
                 if parent_id and parent_id not in row_node_to_word:
                     row_node_to_word[parent_id] = wid
 
                 reference_to_node[f"{side_prefix.lower()}_{i}"] = wid
 
-    # DRAW SLOTS
+    # DRAW SLOTS (topics/foci)
     w_prdp = draw_slot("PrDP", prdp, "S", layer_cl["pre"], "prdp")
     if w_prdp:
         ordered_bottom.append(w_prdp)
@@ -363,16 +383,16 @@ def draw_lsc_tree(data):
     if w_prcs:
         ordered_bottom.append(w_prcs)
 
-    # NUCLEUS AREA
-    has_nuc = (pred_type == "verbal" and nuc_word) or (pred_type == "copular" and attr_word)
     nucleus_anchor = None
 
+    # NUCLEUS
     if has_nuc:
         layer_nuc["center"].append("NUC")
         dot.node("NUC", "NUC", shape="plaintext", group="main")
         dot.edge("CORE:s", "NUC:n", weight="100")
 
-        if has_morphological_arg:
+        # COREw / NUCw should exist if there is ANY morphological argument
+        if has_morphological:
             dot.node(
                 "COREw",
                 label="<<font face='Helvetica'>CORE<sub>W</sub></font>>",
@@ -388,6 +408,7 @@ def draw_lsc_tree(data):
                 group="main",
             )
 
+        # Pre items
         process_item_group(items_pre, "Pre")
 
         if pred_type == "verbal":
@@ -395,7 +416,7 @@ def draw_lsc_tree(data):
             dot.node("NucW", nuc_word, shape="none", group="main")
             dot.edge("NUC:s", "PRED:n", weight="100")
 
-            if has_morphological_arg:
+            if has_morphological:
                 if nuc_pos:
                     dot.node("NucP", nuc_pos, shape="plaintext", fontsize="10", group="main")
                     dot.edge("PRED:s", "NucP:n", weight="100")
@@ -444,8 +465,9 @@ def draw_lsc_tree(data):
                 ordered_bottom.append("AuxW")
 
                 reference_to_node["copula"] = "AuxW"
-                nucleus_anchor = "AuxW"  # (temporal; luego se fija en AttrW)
+                nucleus_anchor = "AuxW"  # temporary; later fixed to AttrW
 
+            # Items between AUX and PRED (attribute)
             if items_between:
                 last_conn_type_between = None
                 current_peri_parent_between = None
@@ -462,27 +484,39 @@ def draw_lsc_tree(data):
                         current_peri_parent_between = None
 
                         top_id = f"{uid}_Top"
-                        dot.node(top_id, item.get("label", "XP"), shape="plaintext", group=uid)
 
-                        is_morph = (item.get("arg_type") == "Morphological")
-                        if is_morph:
-                            morph_arg_top_nodes.append(top_id)
+                        if is_morph(item):
+                            forced_lbl = "AFF" if is_affix_morph(item) else "CL"
+                            dot.node(top_id, forced_lbl, shape="plaintext", group=uid)
+                        else:
+                            dot.node(top_id, item.get("label", "XP"), shape="plaintext", group=uid)
 
-                        parent_anchor = get_argument_anchor(item)
+                        # Anchor for between-args
+                        if is_clitic_morph(item):
+                            parent_anchor = get_clitic_anchor_id()
+                        elif is_morph(item):
+                            parent_anchor = "COREw" if (has_nuc and has_morphological) else "CORE"
+                        else:
+                            parent_anchor = "CORE"
+
                         dot.edge(f"{parent_anchor}:s", f"{top_id}:n", weight="1")
 
-                        if not is_morph:
+                        # ordering only for syntactic args
+                        if not is_morph(item):
                             nuc_level_order.append(top_id)
+
+                        if is_morph(item):
+                            morph_arg_top_nodes.append(top_id)
 
                         wid = draw_word_structure(top_id, item, uid)
                         terminal_words.append(wid)
                         ordered_bottom.append(wid)
 
                         row_node_to_word[top_id] = wid
-
                         reference_to_node[f"between_{i}"] = wid
 
                     else:
+                        # periphery between
                         if conn_type == last_conn_type_between and current_peri_parent_between:
                             parent_id = current_peri_parent_between
                             uid_for_group = f"Between_{i}"
@@ -530,7 +564,7 @@ def draw_lsc_tree(data):
             dot.edge("NUC:s", "PRED_A:n", weight="100")
             nuc_level_order.append("PRED_A")
 
-            if has_morphological_arg:
+            if has_morphological:
                 if attr_pos:
                     dot.node("AttrP", attr_pos, shape="plaintext", fontsize="10", group="main")
                     dot.edge("PRED_A:s", "AttrP:n", weight="100")
@@ -555,25 +589,28 @@ def draw_lsc_tree(data):
             reference_to_node["attribute"] = "AttrW"
             nucleus_anchor = "AttrW"
 
+            # align AUX / between-args / PRED
             if len(nuc_level_order) > 1:
                 with dot.subgraph() as s:
                     s.attr(rank="same")
                     for node_id in nuc_level_order:
                         s.node(node_id)
-                    for i in range(len(nuc_level_order) - 1):
-                        s.edge(nuc_level_order[i], nuc_level_order[i + 1], style="invis", weight="10")
+                    for k in range(len(nuc_level_order) - 1):
+                        s.edge(nuc_level_order[k], nuc_level_order[k + 1], style="invis", weight="10")
             elif cop_word:
                 with dot.subgraph() as s:
                     s.attr(rank="same")
                     s.node("AUX")
                     s.node("PRED_A")
 
+        # Post items
         process_item_group(items_post, "Post")
 
     else:
         process_item_group(items_pre, "Pre")
         process_item_group(items_post, "Post")
 
+    # Post slots
     w_pocs = draw_slot("PoCS", pocs, "CL", layer_core["post"], "pocs")
     if w_pocs:
         ordered_bottom.append(w_pocs)
@@ -582,40 +619,10 @@ def draw_lsc_tree(data):
     if w_podp:
         ordered_bottom.append(w_podp)
 
-    # INSERTAR FORMAS DE REALIZACIÓN (antes de extra-core y operadores)
-    for idx, form in enumerate(realization_forms):
-        form_text = (form.get("text", "") or "").strip()
-        if not form_text:
-            continue
-
-        position = form.get("position", "right")
-        reference_code = form.get("reference", "")
-
-        ref_node_id = reference_to_node.get(reference_code)
-
-        if ref_node_id:
-            form_node_id = f"REAL_{idx}"
-            dot.node(form_node_id, form_text, shape="none", fontsize="11")
-            terminal_words.append(form_node_id)
-            reference_to_node[f"real_{idx}"] = form_node_id
-
-            if ref_node_id in ordered_bottom:
-                ref_index = ordered_bottom.index(ref_node_id)
-                if position == "left":
-                    ordered_bottom.insert(ref_index, form_node_id)
-                else:
-                    ordered_bottom.insert(ref_index + 1, form_node_id)
-            else:
-                ordered_bottom.append(form_node_id)
-
     # =========================
     # EXTRA-CORE SLOTS
     # =========================
     def _side_relative_to_nuc(ref_code: str) -> str:
-        """
-        Retorna: 'left' | 'right' | 'center'
-        center = referencia exactamente en el NUC (misma posición del núcleo)
-        """
         if not nucleus_anchor or nucleus_anchor not in ordered_bottom:
             return "right"
 
@@ -643,17 +650,15 @@ def draw_lsc_tree(data):
         uid = f"ExCS{i}"
 
         ref_code = (slot.get("reference") or "").strip()
-        pos = (slot.get("position") or "right").strip().lower()  # "left" | "right"
+        pos = (slot.get("position") or "right").strip().lower()
 
         ref_side = _side_relative_to_nuc(ref_code)
 
-        # Decide en qué lado del CORE vive la CAJA ExCS
         if ref_side == "left":
             target_list = layer_core["pre"]
         elif ref_side == "right":
             target_list = layer_core["post"]
         else:
-            # referencia "en" el NUC: decide por position
             target_list = layer_core["pre"] if pos == "left" else layer_core["post"]
 
         w_excs = draw_slot(
@@ -678,15 +683,42 @@ def draw_lsc_tree(data):
         else:
             ordered_bottom.append(w_excs)
 
-    # DIBUJAR PROYECCIÓN DE OPERADORES
+    # =========================
+    # INSERT REALIZATION FORMS (after Extra-Core Slots)
+    # =========================
+    for idx, form in enumerate(realization_forms):
+        form_text = (form.get("text", "") or "").strip()
+        if not form_text:
+            continue
+
+        position = (form.get("position", "right") or "right").strip().lower()
+        reference_code = (form.get("reference", "") or "").strip()
+
+        ref_node_id = reference_to_node.get(reference_code)
+        if not ref_node_id:
+            continue
+
+        form_node_id = f"REAL_{idx}"
+        dot.node(form_node_id, form_text, shape="none", fontsize="11", group="real")
+        terminal_words.append(form_node_id)
+        reference_to_node[f"real_{idx}"] = form_node_id
+
+        if ref_node_id in ordered_bottom:
+            ref_index = ordered_bottom.index(ref_node_id)
+            if position == "left":
+                ordered_bottom.insert(ref_index, form_node_id)
+            else:
+                ordered_bottom.insert(ref_index + 1, form_node_id)
+        else:
+            ordered_bottom.append(form_node_id)
+
+    # OPERATORS
     operators = data.get("operators", [])
     if operators and nucleus_anchor:
         draw_operator_projection(nucleus_anchor, operators, reference_to_node)
 
     # ==========================================================
     # ALIGNMENT FIX FINAL:
-    # 1) Ordenar nodos de filas (CLAUSE/CORE/NUC) según ordered_bottom
-    # 2) Enforce rank=same con ese orden, para que Label/PoS/Data queden en columna
     # ==========================================================
     def _word_index(word_id: str) -> int:
         try:
@@ -698,7 +730,6 @@ def draw_lsc_tree(data):
         w = row_node_to_word.get(row_node_id)
         if w:
             return _word_index(w)
-        # Si el row_node_id es un word directamente (caso raro), intenta
         return _word_index(row_node_id)
 
     anchor_idx = len(ordered_bottom) // 2
@@ -706,23 +737,18 @@ def draw_lsc_tree(data):
         anchor_idx = ordered_bottom.index(nucleus_anchor)
 
     def _unique(seq):
-        # preserva orden
         return list(dict.fromkeys(seq))
 
     def _build_row(layer_dict, spine_node: str):
-        # Tomamos todo lo que “vive” en esa fila, pero el orden lo decide ordered_bottom
         items = _unique(layer_dict.get("pre", []) + layer_dict.get("post", []))
         items = [n for n in items if n != spine_node]
-
         items_sorted = sorted(items, key=_row_index)
         left = [n for n in items_sorted if _row_index(n) < anchor_idx]
         right = [n for n in items_sorted if _row_index(n) >= anchor_idx]
-
-        row = left + ([spine_node] if spine_node else []) + right
-        return row
+        return left + ([spine_node] if spine_node else []) + right
 
     def enforce_rank(row_nodes):
-        row_nodes = [n for n in row_nodes if n]  # sanitize
+        row_nodes = [n for n in row_nodes if n]
         if not row_nodes:
             return
         with dot.subgraph() as s:
@@ -732,18 +758,14 @@ def draw_lsc_tree(data):
             for i in range(1, len(row_nodes)):
                 s.edge(row_nodes[i - 1], row_nodes[i], style="invis", weight="50")
 
-    # Filas principales (ordenadas por el orden real de la oración)
     enforce_rank(_build_row(layer_cl, "CL"))
     enforce_rank(_build_row(layer_core, "CORE"))
 
     if has_nuc:
-        # NUC también ordenado por la oración
-        # (incluye peripheries/args sintácticos que se hayan agregado a layer_nuc)
-        nuc_row = _build_row(layer_nuc, "NUC")
-        enforce_rank(nuc_row)
+        enforce_rank(_build_row(layer_nuc, "NUC"))
 
-    # Alinear argumentos morfológicos con NUCw y, además, ORDENARLOS por la oración
-    if has_nuc and has_morphological_arg and morph_arg_top_nodes:
+    # Align ALL morph arg tops (AFF and CL) with NUCw
+    if has_nuc and has_morphological and morph_arg_top_nodes:
         morph_sorted = sorted(_unique(morph_arg_top_nodes), key=_row_index)
         with dot.subgraph() as s:
             s.attr(rank="same")
@@ -753,14 +775,14 @@ def draw_lsc_tree(data):
             for i in range(1, len(morph_sorted)):
                 s.edge(morph_sorted[i - 1], morph_sorted[i], style="invis", weight="50")
 
-    # Alinear todas las palabras al mismo nivel horizontal
+    # All words same horizontal baseline
     if terminal_words:
         with dot.subgraph() as s:
             s.attr(rank="same")
             for n in terminal_words:
                 s.node(n)
 
-    # Mantener el orden lineal de la oración (bottom row)
+    # Keep linear order at bottom
     for i in range(len(ordered_bottom) - 1):
         dot.edge(ordered_bottom[i], ordered_bottom[i + 1], style="invis", weight="10")
 
@@ -768,10 +790,6 @@ def draw_lsc_tree(data):
 
 
 def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
-    """
-    Post-procesa el SVG para agregar líneas punteadas desde etiquetas de operadores hacia targets.
-    Retorna: (svg_modificado, extra_left, extra_right) donde extra_left/right son los espacios adicionales necesarios
-    """
     import xml.etree.ElementTree as ET
 
     if not connections:
@@ -812,7 +830,6 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
     if graph_g is None:
         return svg_code, 0, 0
 
-    # Obtener viewBox original para calcular límites
     vb = root.get("viewBox")
     original_min_x = 0
     original_max_x = 0
@@ -823,7 +840,6 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
             original_min_x = vb_x
             original_max_x = vb_x + vb_w
 
-    # Rastrear los puntos más a la izquierda y derecha de las líneas agregadas
     min_x_used = original_min_x
     max_x_used = original_max_x
 
@@ -868,12 +884,8 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
         p2_y = p1_y
 
         p3_x = p2_x
-
         avg_target_y = sum(tb["cy"] for tb in target_bboxes) / len(target_bboxes)
-        if avg_target_y < p2_y:
-            p3_y = p2_y - distance
-        else:
-            p3_y = p2_y + distance
+        p3_y = p2_y - distance if avg_target_y < p2_y else p2_y + distance
 
         trunk_d = f"M {p1_x},{p1_y} L {p2_x},{p2_y} L {p3_x},{p3_y}"
         trunk_elem = ET.SubElement(graph_g, "{http://www.w3.org/2000/svg}path")
@@ -889,10 +901,7 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
         spacing = 8
         for tb in target_bboxes:
             p4_x = tb["cx"]
-            if tb["cy"] < p3_y:
-                p4_y = tb["cy"] + spacing
-            else:
-                p4_y = tb["cy"] - spacing
+            p4_y = tb["cy"] + spacing if tb["cy"] < p3_y else tb["cy"] - spacing
 
             branch_d = f"M {p3_x},{p3_y} L {p4_x},{p4_y}"
             branch_elem = ET.SubElement(graph_g, "{http://www.w3.org/2000/svg}path")
@@ -912,9 +921,6 @@ def postprocess_svg_with_connections(svg_code, connections, ref_to_node):
 
 
 def expand_svg_viewbox(svg_code, pad_left=0, pad_right=0, pad_top=0, pad_bottom=0):
-    """
-    Expande el viewBox del SVG para evitar que se corten elementos.
-    """
     import xml.etree.ElementTree as ET
 
     NS = "http://www.w3.org/2000/svg"
@@ -942,7 +948,6 @@ def expand_svg_viewbox(svg_code, pad_left=0, pad_right=0, pad_top=0, pad_bottom=
 
     root.set("viewBox", f"{new_x:.2f} {new_y:.2f} {new_w:.2f} {new_h:.2f}")
 
-    # Actualizar width y height si existen
     w_attr = root.get("width")
     h_attr = root.get("height")
 
@@ -961,7 +966,7 @@ def expand_svg_viewbox(svg_code, pad_left=0, pad_right=0, pad_top=0, pad_bottom=
 
 
 # ==========================================
-# INTERFACE (from here to the end)
+# INTERFACE
 # ==========================================
 try:
     st.image("albura_logo.png")
@@ -973,7 +978,6 @@ st.markdown("---")
 
 main_c1, main_c2 = st.columns([1, 3])
 
-# Valor por defecto para evitar NameError
 p_type_key = "verbal"
 
 with main_c1:
@@ -1033,11 +1037,29 @@ with main_c1:
                         )
 
                     c1, c2, c3 = st.columns([1, 2, 1])
-                    lbl = c1.text_input("Label", value=def_lbl, key=get_key(f"betw_l_{i}"))
+
+                    morph_form = None
+                    if conn_type_raw == "Argument" and arg_type == "Morphological":
+                        morph_form = c1.selectbox(
+                            "Label",
+                            ["Affix", "Clitic"],
+                            key=get_key(f"betw_morphform_{i}")
+                        )
+                        lbl = "AFF" if morph_form == "Affix" else "CL"
+                    else:
+                        lbl = c1.text_input("Label", value=def_lbl, key=get_key(f"betw_l_{i}"))
+
                     txt = c2.text_input("Data", key=get_key(f"betw_t_{i}"))
                     pos = c3.text_input("PoS", key=get_key(f"betw_p_{i}"))
 
-                    items_between_data.append({"label": lbl, "text": txt, "pos": pos, "conn_type": code, "arg_type": arg_type})
+                    items_between_data.append({
+                        "label": lbl,
+                        "text": txt,
+                        "pos": pos,
+                        "conn_type": code,
+                        "arg_type": arg_type,
+                        "morph_form": morph_form
+                    })
 
             p_type_key = "copular"
 
@@ -1073,11 +1095,29 @@ with main_c1:
                 )
 
             c1, c2, c3 = st.columns([1, 2, 1])
-            lbl = c1.text_input("Label", value=def_lbl, key=get_key(f"pre_l_{i}_{code}"))
+
+            morph_form = None
+            if conn_type_raw == "Argument" and arg_type == "Morphological":
+                morph_form = c1.selectbox(
+                    "Label",
+                    ["Affix", "Clitic"],
+                    key=get_key(f"pre_morphform_{i}")
+                )
+                lbl = "AFF" if morph_form == "Affix" else "CL"
+            else:
+                lbl = c1.text_input("Label", value=def_lbl, key=get_key(f"pre_l_{i}_{code}"))
+
             txt = c2.text_input("Data", key=get_key(f"pre_t_{i}"))
             pos = c3.text_input("PoS", key=get_key(f"pre_p_{i}"))
 
-            items_pre_data.append({"label": lbl, "text": txt, "pos": pos, "conn_type": code, "arg_type": arg_type})
+            items_pre_data.append({
+                "label": lbl,
+                "text": txt,
+                "pos": pos,
+                "conn_type": code,
+                "arg_type": arg_type,
+                "morph_form": morph_form
+            })
 
         st.markdown("---")
 
@@ -1100,11 +1140,29 @@ with main_c1:
                 )
 
             c1, c2, c3 = st.columns([1, 2, 1])
-            lbl = c1.text_input("Label", value=def_lbl, key=get_key(f"post_l_{i}_{code}"))
+
+            morph_form = None
+            if conn_type_raw == "Argument" and arg_type == "Morphological":
+                morph_form = c1.selectbox(
+                    "Label",
+                    ["Affix", "Clitic"],
+                    key=get_key(f"post_morphform_{i}")
+                )
+                lbl = "AFF" if morph_form == "Affix" else "CL"
+            else:
+                lbl = c1.text_input("Label", value=def_lbl, key=get_key(f"post_l_{i}_{code}"))
+
             txt = c2.text_input("Data", key=get_key(f"post_t_{i}"))
             pos = c3.text_input("PoS", key=get_key(f"post_p_{i}"))
 
-            items_post_data.append({"label": lbl, "text": txt, "pos": pos, "conn_type": code, "arg_type": arg_type})
+            items_post_data.append({
+                "label": lbl,
+                "text": txt,
+                "pos": pos,
+                "conn_type": code,
+                "arg_type": arg_type,
+                "morph_form": morph_form
+            })
 
     # -------------------------
     # 3) TOPICS / FOCI
@@ -1133,7 +1191,6 @@ with main_c1:
         num_excs = st.number_input("Number of items", min_value=0, value=0, key=get_key("num_excs"))
 
         extra_core_slots_data = []
-
         base_reference_items = []
 
         if pred_type == "Predicative" and nucleus_data.get("text"):
@@ -1244,7 +1301,6 @@ with main_c1:
             if podp.get("text"):
                 reference_items.append(("PoDP", "podp"))
 
-            # Extra-Core Slots también disponibles como referencias
             for i, slot in enumerate(extra_core_slots_data):
                 if slot.get("text"):
                     reference_items.append((f"Extra-Core {i+1}: {slot['text'][:20]}", f"excs_{i}"))
@@ -1282,7 +1338,7 @@ with main_c1:
                     st.warning("No reference items available. Please add constituents first.")
                     break
 
-    # Operadores válidos por estrato
+    # Operators by layer
     ops_nuc = ["Aspect", "Negation", "Directionals"]
     ops_core = ["Directionals", "Event quantification", "Modality", "Negation"]
     ops_clause = ["Status", "Negation", "Tense", "Evidentiality", "Illocutionary force"]
@@ -1335,7 +1391,6 @@ with main_c1:
                 if podp.get("text"):
                     target_options.append((f"PoDP: {podp['text'][:20]}", "podp"))
 
-                # Extra-Core Slots también disponibles como targets
                 for idx, slot in enumerate(extra_core_slots_data):
                     if slot.get("text"):
                         target_options.append((f"Extra-Core {idx+1}: {slot['text'][:20]}", f"excs_{idx}"))
@@ -1409,7 +1464,6 @@ with main_c2:
 
         graph, pending_connections, node_mapping = draw_lsc_tree(data)
 
-        # Botones
         btn_col1, btn_col2, btn_col3 = st.columns([0.12, 0.76, 0.12])
         with btn_col3:
             st.button(
@@ -1420,23 +1474,25 @@ with main_c2:
             )
 
         try:
-            # 1) Generar SVG base
             graph.attr(dpi="72")
             svg_code = graph.pipe(format="svg").decode("utf-8")
 
-            # 2) Post-procesar (agregar líneas punteadas) y obtener espacio extra necesario
             svg_code, extra_left, extra_right = postprocess_svg_with_connections(svg_code, pending_connections, node_mapping)
 
-            # 3) Expandir viewBox solo lo necesario (con un mínimo de padding)
-            svg_code = expand_svg_viewbox(svg_code, pad_left=max(10, extra_left), pad_right=max(10, extra_right), pad_top=10, pad_bottom=10)
+            svg_code = expand_svg_viewbox(
+                svg_code,
+                pad_left=max(10, extra_left),
+                pad_right=max(10, extra_right),
+                pad_top=10,
+                pad_bottom=10
+            )
 
-            # 4) Generar PNG desde el SVG final
             png_data = None
             try:
                 import cairosvg
                 png_data = cairosvg.svg2png(bytestring=svg_code.encode("utf-8"), dpi=300)
             except ImportError:
-                pass  # cairosvg no disponible
+                pass
 
             with btn_col1:
                 if png_data:
@@ -1456,7 +1512,6 @@ with main_c2:
                         use_container_width=True,
                     )
 
-            # 5) Visualización en pantalla (centrado)
             svg_view = re.sub(r'(width|height)="[^"]*"', "", svg_code)
 
             html_content = f"""
