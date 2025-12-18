@@ -1039,7 +1039,13 @@ with main_c1:
     # 1) NUCLEUS
     # -------------------------
     with st.expander("1. Nucleus", expanded=False):
-        pred_type = st.radio("Type", ["Predicative", "Attributive"], horizontal=True, key=get_key("pred_type"))
+        pred_type = st.radio(
+            "Type", 
+            ["Predicative", "Attributive"], 
+            horizontal=True, 
+            key=get_key("pred_type"),
+            help="Predicative: Verbal predicates. Attributive: Copular constructions (AUX + PRED)."
+        )
 
         nucleus_data = {"text": "", "pos": ""}
         copula_data = {"text": "", "pos": ""}
@@ -1049,23 +1055,29 @@ with main_c1:
         if pred_type == "Predicative":
             c1, c2 = st.columns([2, 1])
             nucleus_data["text"] = c1.text_input("Data", key=get_key("nuc_txt"))
-            nucleus_data["pos"] = c2.text_input("PoS", key=get_key("nuc_pos"))
+            nucleus_data["pos"] = c2.text_input("PoS", key=get_key("nuc_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
             p_type_key = "verbal"
         else:
             st.markdown("**AUX**")
             c1, c2 = st.columns([2, 1])
             copula_data["text"] = c1.text_input("Data", key=get_key("aux_txt"))
-            copula_data["pos"] = c2.text_input("PoS", key=get_key("aux_pos"))
+            copula_data["pos"] = c2.text_input("PoS", key=get_key("aux_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
 
             st.markdown("**PRED**")
             c3, c4 = st.columns([2, 1])
             attribute_data["text"] = c3.text_input("Data", key=get_key("attr_txt"))
-            attribute_data["pos"] = c4.text_input("PoS", key=get_key("attr_pos"))
+            attribute_data["pos"] = c4.text_input("PoS", key=get_key("attr_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
 
             st.markdown("---")
-            st.markdown("**Arguments and adjuncts between AUX and PRED**")
+            st.markdown("**Constituents between AUX and PRED**")
             st.caption("(from leftmost to rightmost)")
-            num_between = st.number_input("Number of items", min_value=0, value=0, key=get_key("num_between"))
+            num_between = st.number_input(
+                "Number of items", 
+                min_value=0, 
+                value=0, 
+                key=get_key("num_between"),
+                help="Use this for arguments or adjuncts located between the copula and the attribute (e.g., 'is **she often** happy?')."
+)
 
             if num_between > 0:
                 conn_map = {
@@ -1086,7 +1098,8 @@ with main_c1:
                             "Argument type",
                             ["Syntactic", "Morphological"],
                             horizontal=True,
-                            key=get_key(f"betw_argtype_{i}")
+                            key=get_key(f"betw_argtype_{i}"),
+                            help="Syntactic: Standard phrasal arguments (RP, PP). Morphological: Affixes or clitics attached to the COREw/NUCw nodes."
                         )
 
                     c1, c2, c3 = st.columns([2, 1, 1])
@@ -1104,7 +1117,7 @@ with main_c1:
                     else:
                         lbl = c2.text_input("Label", value=def_lbl, key=get_key(f"betw_l_{i}"))
 
-                    pos = c3.text_input("PoS", key=get_key(f"betw_p_{i}"))
+                    pos = c3.text_input("PoS", key=get_key(f"betw_p_{i}"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
 
                     items_between_data.append({
                         "label": lbl,
@@ -1145,7 +1158,8 @@ with main_c1:
                     "Argument type",
                     ["Syntactic", "Morphological"],
                     horizontal=True,
-                    key=get_key(f"pre_argtype_{i}")
+                    key=get_key(f"pre_argtype_{i}"),
+                    help="Syntactic: Standard phrasal arguments (RP, PP). Morphological: Affixes or clitics attached to the COREw/NUCw nodes."
                 )
 
             c1, c2, c3 = st.columns([2, 1, 1])
@@ -1163,7 +1177,7 @@ with main_c1:
             else:
                 lbl = c2.text_input("Label", value=def_lbl, key=get_key(f"pre_l_{i}_{code}"))
 
-            pos = c3.text_input("PoS", key=get_key(f"pre_p_{i}"))
+            pos = c3.text_input("PoS", key=get_key(f"pre_p_{i}"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
 
             items_pre_data.append({
                 "label": lbl,
@@ -1191,7 +1205,8 @@ with main_c1:
                     "Argument type",
                     ["Syntactic", "Morphological"],
                     horizontal=True,
-                    key=get_key(f"post_argtype_{i}")
+                    key=get_key(f"post_argtype_{i}"),
+                    help="Syntactic: Standard phrasal arguments (RP, PP). Morphological: Affixes or clitics attached to the COREw/NUCw nodes."
                 )
 
             c1, c2, c3 = st.columns([2, 1, 1])
@@ -1209,7 +1224,7 @@ with main_c1:
             else:
                 lbl = c2.text_input("Label", value=def_lbl, key=get_key(f"post_l_{i}_{code}"))
 
-            pos = c3.text_input("PoS", key=get_key(f"post_p_{i}"))
+            pos = c3.text_input("PoS", key=get_key(f"post_p_{i}"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
 
             items_post_data.append({
                 "label": lbl,
@@ -1229,7 +1244,7 @@ with main_c1:
             c1, c2, c3 = st.columns([2, 1, 1])
             txt = c1.text_input("Data", key=get_key(f"{key_prefix}_txt"))
             lbl = c2.text_input("Label", default_lbl, key=get_key(f"{key_prefix}_lbl"))
-            pos = c3.text_input("PoS", key=get_key(f"{key_prefix}_pos"))
+            pos = c3.text_input("PoS", key=get_key(f"{key_prefix}_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
             return {"label": lbl, "text": txt, "pos": pos}
 
         prdp = input_peri("PrDP", "prdp", "XP")
@@ -1284,10 +1299,15 @@ with main_c1:
             c1, c2, c3 = st.columns([2, 1, 1])
             txt = c1.text_input("Data", key=get_key(f"excs_t_{i}"))
             lbl = c2.text_input("Label", value="XP", key=get_key(f"excs_l_{i}"))
-            pos = c3.text_input("PoS", key=get_key(f"excs_p_{i}"))
+            pos = c3.text_input("PoS", key=get_key(f"excs_p_{i}"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
 
             c4, c5 = st.columns([1, 1])
-            position = c4.selectbox("Position", ["Left of", "Right of"], key=get_key(f"excs_pos_{i}"))
+            position = c4.selectbox(
+                "Position", 
+                ["Left of", "Right of"], 
+                key=get_key(f"excs_pos_{i}"),
+                help="Determines the linear order of the Extra-Core Slot relative to the reference item selected."
+            )
 
             current_refs = base_reference_items.copy()
             for j in range(i):
@@ -1297,7 +1317,12 @@ with main_c1:
 
             if current_refs:
                 ref_labels = [x[0] for x in current_refs]
-                ref_choice = c5.selectbox("Reference item", ref_labels, key=get_key(f"excs_ref_{i}"))
+                ref_choice = c5.selectbox(
+                    "Reference item", 
+                    ref_labels, 
+                    key=get_key(f"excs_ref_{i}"),
+                    help="Select the existing constituent that will serve as the anchor for positioning this slot."
+                )
                 ref_code = current_refs[ref_labels.index(ref_choice)][1]
             else:
                 ref_code = None
@@ -1369,7 +1394,7 @@ with main_c1:
                 form_text = c1.text_input(
                     "Form",
                     key=get_key(f"real_text_{i}"),
-                    help="affix, particle, etc. (e.g., -able, will, Ø, -ing)",
+                    help="Any item other than an argument or adjunct that serves as realization of an operator, such as affixes or particles (e.g., -able, will, Ø, -ing)",
                 )
 
                 position = c2.selectbox("Position", ["Left of", "Right of"], key=get_key(f"real_pos_{i}"))
@@ -1412,9 +1437,19 @@ with main_c1:
 
                 c1, c2 = st.columns([1, 1])
 
-                op_value = c1.text_input("Value", key=get_key(f"{key_prefix}_value_{i}"))
+                op_value = c1.text_input(
+                    "Value", 
+                    key=get_key(f"{key_prefix}_value_{i}"),
+                    help="The grammatical value of the operator (e.g., 'PAST', 'PROGR', 'DECL')."
+                )
 
-                label_side = c2.selectbox("Label position", options=["Right", "Left"], index=0, key=get_key(f"{key_prefix}_side_{i}"))
+                label_side = c2.selectbox(
+                    "Label position", 
+                    options=["Right", "Left"], 
+                    index=0, 
+                    key=get_key(f"{key_prefix}_side_{i}"),
+                    help="Determines if the operator label appears on the left or right side of the projection spine."
+                )
 
                 target_options = [("None", None)]
 
@@ -1460,7 +1495,7 @@ with main_c1:
                     "Links to",
                     options=target_labels[1:],
                     key=get_key(f"{key_prefix}_target_{i}"),
-                    help="Select the constituent(s) or realization form(s) this operator links to",
+                    help="Select the constituent(s) or realization form(s) this operator links to. They can be more than one. This will draw the dashed connection lines.",
                 )
 
                 target_codes = []

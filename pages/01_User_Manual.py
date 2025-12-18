@@ -39,7 +39,7 @@ st.divider()
 # --- Header Section ---
 st.title("User Manual")
 st.markdown("""
-    **Albura** is a specialized tool for linguists to create high-quality diagrams of the 
+    **Albura** is a specialized tool for creating diagrams of the 
     **Layered Structure of the Clause (LSC)** according to Role and Reference Grammar (RRG).
     """)
 
@@ -49,15 +49,15 @@ tab_intro, tab_interface, tab_workflow, tab_tech = st.tabs([
 ])
 
 with tab_intro:
-    st.subheader("What is Albura?")
+    st.subheader("What does *Albura* mean?")
     st.write("""
         The name **Albura** refers in Spanish to the *sapwood* (the living, outermost part of a tree trunk).
              
         I thought it was a nice metaphor. (Thanks, Jakie! ❤️).
     """)
     
-    st.success("""
-        **Core Features:**
+    st.subheader("Core Features:")
+    st.write("""           
         * **Constituent Projection:** Visualize the hierarchy from Sentence down to Word level.
         * **Operator Projection:** Map grammatical categories (Tense, Aspect, Modality, etc.) clearly.
         * **Morphological Precision:** Distinct handling for affixes and clitics.
@@ -87,25 +87,23 @@ with tab_interface:
 with tab_workflow:
     st.subheader("Recommended Step-by-Step")
     
-    with st.expander("1. Define the Nucleus (Mandatory)", expanded=True):
-        st.write("Choose between **Predicative** or **Attributive**.")
-        st.write("You can put constituents (arguments and adjuncts) that appear between AUX and NUC if you need to.")
-        st.caption("Note: The diagram will not appear until the Nucleus text is entered.")
+    st.markdown("""
+    #### 1. Define the Nucleus (Mandatory)
+    * Choose between **Predicative** (lexical verbs) or **Attributive** (copular constructions).
+    * In Attributive mode, you can insert arguments and adjuncts that appear between the AUX and the NUC if needed.
+    * **Note:** The diagram will not appear until you enter the Nucleus text.
 
-    with st.expander("2. Add Constituents", expanded=False):
-        st.write("Add items from leftmost to rightmost.")
-        st.markdown("""
-        * **Pre-nuclear:** Elements before the verb.
-        * **Post-nuclear:** Elements after the verb.
-        * **Morphology:** Select 'Morphological' for affixes/clitics to attach them to the **COREw/NUCw** nodes.
-        """)
+    #### 2. Add Constituents
+    Add items following their natural linear order (from leftmost to rightmost):
+    * **Pre-nuclear:** Elements located before the nucleus.
+    * **Post-nuclear:** Elements located after the nucleus.
+    * **Morphology:** For head-marking languages, select 'Morphological' for affixes or clitics to attach them to the **COREw/NUCw** nodes.
 
-    with st.expander("3. Configure Operators", expanded=False):
-        st.write("Operators are scoped by layer (Nucleus, Core, or Clause).")
-        st.markdown("""
-        1.  **Define Realization Forms:** If an operator is an affix or particle not yet in the tree, add it here first.
-        2.  **Add Operators:** Select the type (e.g., Aspect) and use the **'Links to'** multi-select to draw dashed lines to specific item(s).
-        """)
+    #### 3. Configure Operators
+    Operators are scoped by layer (Nucleus, Core, or Clause).
+    1.  **Define Realization Forms:** If an operator is expressed by an affix or particle not already in the tree, add it here first.
+    2.  **Add Operators:** Select the operator type (e.g., Aspect) and use the **'Links to'** multi-select to draw dashed lines to the specific item(s) that express it.
+    """)
 
 with tab_tech:
     st.subheader("RRG Abbreviations Reference")
@@ -113,9 +111,18 @@ with tab_tech:
         {"Category": "Layer", "Abbr": "NUC / CORE / CL", "Meaning": "Nucleus / Core / Clause"},
         {"Category": "Slots", "Abbr": "PrDP / PoDP", "Meaning": "Pre- and Post-Detached Positions"},
         {"Category": "Slots", "Abbr": "PrCS / PoCS", "Meaning": "Pre- and Post-Core Slots"},
-        {"Category": "Word Level", "Abbr": "COREw / NUCw", "Meaning": "Morphological word nodes"},
-        {"Category": "Morph", "Abbr": "AFF / CL", "Meaning": "Affix / Clitic"},
-        {"Category": "Operators", "Abbr": "ASP / TNS / IF", "Meaning": "Aspect / Tense / Illocutionary Force"},
+        {"Category": "Word Level", "Abbr": "COREw / NUCw", "Meaning": "Morphological word nodes (CORE-word / NUC-word)"},
+        {"Category": "Morphology", "Abbr": "AFF / CL", "Meaning": "Affix / Clitic"},
+        # Operadores desglosados según tu diccionario OP_ABBR
+        {"Category": "Operators", "Abbr": "ASP", "Meaning": "Aspect"},
+        {"Category": "Operators", "Abbr": "NEG", "Meaning": "Negation"},
+        {"Category": "Operators", "Abbr": "DIR", "Meaning": "Directionals"},
+        {"Category": "Operators", "Abbr": "EVQ", "Meaning": "Event quantification"},
+        {"Category": "Operators", "Abbr": "MOD", "Meaning": "Modality"},
+        {"Category": "Operators", "Abbr": "STA", "Meaning": "Status"},
+        {"Category": "Operators", "Abbr": "TNS", "Meaning": "Tense"},
+        {"Category": "Operators", "Abbr": "EVID", "Meaning": "Evidentiality"},
+        {"Category": "Operators", "Abbr": "IF", "Meaning": "Illocutionary force"},
     ]
     st.table(pd.DataFrame(abbr_data))
 
@@ -146,15 +153,8 @@ with col2:
 st.divider()
 
 # --- Footer ---
-f1, f2 = st.columns([0.7, 0.3])
-with f1:
-    st.markdown("""
-        ### Contact & License
-        Developed by **Carlos González Vergara** (cgonzalv@uc.cl).  
-        This tool is provided under the **Creative Commons BY 4.0** license.
-    """)
-with f2:
-    try:
-        st.image("cc_by_icon.png", width=150)
-    except:
-        st.markdown("**(CC BY 4.0)**")
+st.markdown("""
+    ### Contact & License
+    Developed by **Carlos González Vergara** (cgonzalv@uc.cl).  
+    This tool is provided under the **Creative Commons BY 4.0** license.
+""")
