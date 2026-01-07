@@ -1021,7 +1021,7 @@ def expand_svg_viewbox(svg_code, pad_left=0, pad_right=0, pad_top=0, pad_bottom=
 # INTERFACE
 # ==========================================
 try:
-    st.image("albura_logo.png", width=250)
+    st.image("albura_logo.png", width=300)
 except Exception:
     st.title("Albura")
 
