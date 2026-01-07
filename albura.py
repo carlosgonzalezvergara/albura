@@ -1021,7 +1021,7 @@ def expand_svg_viewbox(svg_code, pad_left=0, pad_right=0, pad_top=0, pad_bottom=
 # INTERFACE
 # ==========================================
 try:
-    st.image("albura_logo.png")
+    st.image("albura_logo.png", width=250)
 except Exception:
     st.title("Albura")
 
@@ -1519,16 +1519,16 @@ with main_c1:
     st.caption("by Carlos González Vergara (__cgonzalv@uc.cl__)")
 
     try:
-        with open("cc_by_icon.png", "rb") as f:
+        with open("cc_icon.png", "rb") as f:
             import base64
             img_data = base64.b64encode(f.read()).decode()
         st.markdown(
-            f'<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">'
-            f'<img src="data:image/png;base64,{img_data}" alt="CC BY 4.0" width="88"></a>',
+            f'<a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">'
+            f'<img src="data:image/png;base64,{img_data}" alt="CC BY-NC-ND 4.0" width="88"></a>',
             unsafe_allow_html=True,
         )
     except Exception:
-        st.markdown("[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)")
+        st.markdown("[CC BY 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)")
 
 
 # ==========================================
