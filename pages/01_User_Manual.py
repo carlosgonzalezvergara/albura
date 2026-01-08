@@ -45,16 +45,10 @@ st.markdown("""
 
 # --- Introduction Tabs ---
 tab_intro, tab_interface, tab_workflow, tab_tech = st.tabs([
-    "✨ Introduction", "🖥️ Interface", "🛠️ Workflow", "📊 Abbreviations"
+    "Introduction", "Interface", "Workflow", "Abbreviations"
 ])
 
 with tab_intro:
-    st.subheader("What does *Albura* mean?")
-    st.write("""
-        The name **Albura** refers in Spanish to the *sapwood* (the living, outermost part of a tree trunk).
-             
-        I thought it was a nice metaphor. (Thanks, Jakie! ❤️).
-    """)
     
     st.subheader("Core Features:")
     st.write("""           
@@ -62,6 +56,12 @@ with tab_intro:
         * **Operator Projection:** Map grammatical categories (Tense, Aspect, Modality, etc.) clearly.
         * **Morphological Precision:** Distinct handling for affixes and clitics.
         * **Publication Ready:** Export in high-resolution PNG.
+    """)
+
+    st.subheader("What does *Albura* mean?")
+    st.write("""
+        The name **Albura** refers in Spanish to the *sapwood* (the living, outermost part of a tree trunk).       
+        I thought it was a nice metaphor. (Thanks, Jakie! ❤️).
     """)
 
 with tab_interface:
@@ -129,7 +129,7 @@ with tab_tech:
 st.divider()
 
 # --- Practical Tips Section ---
-st.header("💡 Expert Tips")
+st.subheader("Expert Tips")
 col1, col2 = st.columns(2)
 
 with col1:
@@ -156,5 +156,5 @@ st.divider()
 st.markdown("""
     ### Contact & License
     Developed by **Carlos González Vergara** (cgonzalv@uc.cl).  
-    This tool is provided under the **Creative Commons BY 4.0** license.
+    This tool is provided under the **Creative Commons BY-NC-ND 4.0** license.
 """)
