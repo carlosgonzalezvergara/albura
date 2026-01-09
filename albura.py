@@ -2,6 +2,8 @@ import streamlit as st
 import graphviz
 import streamlit.components.v1 as components
 import re
+import base64
+from pathlib import Path
 
 st.set_page_config(
     page_title="Albura - RRG LSC Diagram Assistant",
@@ -1021,7 +1023,13 @@ def expand_svg_viewbox(svg_code, pad_left=0, pad_right=0, pad_top=0, pad_bottom=
 # INTERFACE
 # ==========================================
 try:
-    st.image("albura_logo.png", width=300)
+    logo_path = Path(__file__).parent / "albura_logo.png"
+    with open(logo_path, "rb") as f:
+        logo_data = base64.b64encode(f.read()).decode()
+    st.markdown(
+        f'<img src="data:image/png;base64,{logo_data}" alt="Albura" width="300">',
+        unsafe_allow_html=True,
+    )
 except Exception:
     st.title("Albura")
 
@@ -1519,8 +1527,8 @@ with main_c1:
     st.caption("by Carlos González Vergara (__cgonzalv@uc.cl__)")
 
     try:
-        with open("cc_icon.png", "rb") as f:
-            import base64
+        cc_icon_path = Path(__file__).parent / "cc_icon.png"
+        with open(cc_icon_path, "rb") as f:
             img_data = base64.b64encode(f.read()).decode()
         st.markdown(
             f'<a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">'
