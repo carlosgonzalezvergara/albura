@@ -3,8 +3,8 @@ from playwright.sync_api import sync_playwright
 
 def wake_up_apps():
     apps = [
-        "https://carlosgonzalezvergara-albura.hf.space", # Enlace directo de Albura
-        "https://albura.streamlit.app"                   # Tu app en Streamlit Cloud
+        "https://vendler.streamlit.app",
+        "https://albura.streamlit.app"                   
     ]
     
     with sync_playwright() as p:
