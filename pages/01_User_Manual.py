@@ -71,23 +71,30 @@ with tab_interface:
         st.markdown("""
         #### 1. Input Panel (Left)
         Organized in logical accordions:
-        1. **Nucleus:** Predicative verbs or Auxiliary plus predicative elements.
-        2. **Arguments and Adjuncts**: Argumental constituents linked to the CORE (or COREw) layer, and peripheral constituents.
-        3. **Topics and Foci:** Pre/Post-Detached Positions, and Pre/Post-Core Slots.
-        4. **Extra-Core Slots:** Syntactic extra constituents used when the argument is morphological (Head-marking languages).
-        5. **Operators:** The functional projection.
+        1. **Load a diagram:** Load a previously saved `.albura` file to continue editing.
+        2. **Nucleus:** Predicative verbs or Auxiliary plus predicative elements.
+        3. **Arguments and Adjuncts**: Argumental constituents linked to the CORE (or COREw) layer, and peripheral constituents.
+        4. **Topics and Foci:** Pre/Post-Detached Positions, and Pre/Post-Core Slots.
+        5. **Extra-Core Slots:** Syntactic extra constituents used when the argument is morphological (Head-marking languages).
+        6. **Operators:** The functional projection.
         """)
     with c2:
         st.markdown("""
         #### 2. Visualizer (Right)
         * **Real-time Rendering:** Watch the tree grow as you type.
-        * **Quick Reset:** Use the **"New"** button to clear the state and start fresh.
+        * **Save diagram as .albura:** Save your work to a `.albura` file for later editing.
+        * **Export diagram as .png:** Download a high-resolution image of your diagram.
+        * **Create new diagram:** Clear the state and start fresh.
         """)
 
 with tab_workflow:
     st.subheader("Recommended Step-by-Step")
     
     st.markdown("""
+    #### 0. Load a Previous Diagram (Optional)
+    * If you have a previously saved `.albura` file, click on **"Load a diagram"** to continue editing.
+    * All constituents, operators, and settings will be restored.
+
     #### 1. Define the Nucleus (Mandatory)
     * Choose between **Predicative** (lexical verbs) or **Attributive** (copular constructions).
     * In Attributive mode, you can insert arguments and adjuncts that appear between the AUX and the NUC if needed.
@@ -103,6 +110,10 @@ with tab_workflow:
     Operators are scoped by layer (Nucleus, Core, or Clause).
     1.  **Define Realization Forms:** If an operator is expressed by an affix or particle not already in the tree, add it here first.
     2.  **Add Operators:** Select the operator type (e.g., Aspect) and use the **'Links to'** multi-select to draw dashed lines to the specific item(s) that express it.
+
+    #### 4. Save and Export
+    * **Save diagram as .albura:** Save your work to continue editing later. The `.albura` file preserves all your data.
+    * **Export diagram as .png:** Download a publication-ready image of your diagram.
     """)
 
 with tab_tech:
@@ -140,6 +151,7 @@ with col1:
     - **Copulas:** Use the "Items between AUX and PRED" feature for arguments or adjuncts located between the auxiliary word and the predicator.
     - **Labels:** Use standard abbreviations (NP, PP, AdvP) for cleaner diagrams.
     - **PoS:** This is a space where you can add optional information (e.g., part of sentence).
+    - **Save often:** Use "Save diagram as .albura" to preserve your work and continue later.
     """)
 
 with col2:
@@ -148,6 +160,7 @@ with col2:
     - **Empty Screen:** Check if you have filled the 'Data' field in the Nucleus section.
     - **Dashed Lines:** If an operator line isn't showing, ensure you have selected a target in the 'Links to' dropdown.
     - **Alignment:** If the tree looks 'crowded', try simplifying the PoS labels.
+    - **Loading issues:** Make sure your `.albura` file was created with a compatible version of Albura.
     """)
 
 st.divider()
