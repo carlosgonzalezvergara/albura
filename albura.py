@@ -3,6 +3,7 @@ import graphviz
 import streamlit.components.v1 as components
 import re
 import base64
+import json
 from pathlib import Path
 
 st.set_page_config(
@@ -10,6 +11,43 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# Custom CSS for green buttons only
+st.markdown("""
+<style>
+    /* Green color for ALL buttons */
+    button[kind="primary"], 
+    button[kind="secondary"],
+    .stButton > button,
+    .stDownloadButton > button,
+    [data-testid="stBaseButton-secondary"],
+    [data-testid="baseButton-secondary"] {
+        background-color: #4CAF82 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+    }
+    
+    button[kind="primary"]:hover, 
+    button[kind="secondary"]:hover,
+    .stButton > button:hover,
+    .stDownloadButton > button:hover,
+    [data-testid="stBaseButton-secondary"]:hover,
+    [data-testid="baseButton-secondary"]:hover {
+        background-color: #3d9970 !important;
+        color: white !important;
+        border: none !important;
+    }
+    
+    button[kind="primary"]:active, 
+    button[kind="secondary"]:active,
+    .stButton > button:active,
+    .stDownloadButton > button:active {
+        background-color: #2e8b57 !important;
+        color: white !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 OP_ABBR = {
     "Aspect": "ASP",
@@ -27,9 +65,93 @@ OP_ABBR = {
 if "form_id" not in st.session_state:
     st.session_state["form_id"] = 0
 
+# --- STATE for loaded data ---
+if "loaded_data" not in st.session_state:
+    st.session_state["loaded_data"] = None
+
 
 def reset_state():
     st.session_state["form_id"] += 1
+    st.session_state["loaded_data"] = None
+
+
+def load_albura_file(uploaded_file):
+    """Load data from an .albura file and store in session state."""
+    try:
+        content = uploaded_file.read().decode("utf-8")
+        data = json.loads(content)
+        st.session_state["loaded_data"] = data
+        st.session_state["form_id"] += 1  # Force re-render with new data
+        return True
+    except Exception as e:
+        st.error(f"Error loading file: {e}")
+        return False
+
+
+def ld(keys, default=""):
+    """Get a value from loaded data using dot notation keys.
+    
+    Examples:
+        ld("nucleus.text") -> loaded_data["nucleus"]["text"]
+        ld("items_pre") -> loaded_data["items_pre"]
+    """
+    if st.session_state["loaded_data"] is None:
+        return default
+    
+    data = st.session_state["loaded_data"]
+    parts = keys.split(".")
+    
+    try:
+        result = data
+        for part in parts:
+            if isinstance(result, dict):
+                result = result.get(part, default)
+            else:
+                return default
+        return result if result is not None else default
+    except (KeyError, TypeError):
+        return default
+
+
+def ld_len(key):
+    """Get length of a list from loaded data."""
+    val = ld(key, [])
+    return len(val) if isinstance(val, list) else 0
+
+
+def ld_item(key, index, subkey, default=""):
+    """Get a value from a list item in loaded data.
+    
+    Example:
+        ld_item("items_pre", 0, "text") -> loaded_data["items_pre"][0]["text"]
+    """
+    if st.session_state["loaded_data"] is None:
+        return default
+    
+    data = st.session_state["loaded_data"]
+    try:
+        items = data.get(key, [])
+        if isinstance(items, list) and index < len(items):
+            item = items[index]
+            if isinstance(item, dict):
+                return item.get(subkey, default)
+    except (KeyError, TypeError, IndexError):
+        pass
+    return default
+
+
+def ld_operators_by_layer(layer_code):
+    """Get operators for a specific layer from loaded data.
+    
+    Returns a list of operator dicts for the given layer (NUC, CORE, CLAUSE).
+    """
+    if st.session_state["loaded_data"] is None:
+        return []
+    
+    data = st.session_state["loaded_data"]
+    operators = data.get("operators", [])
+    
+    return [op for op in operators if op.get("layer") == layer_code]
 
 
 def get_key(base_name):
@@ -1041,17 +1163,35 @@ main_c1, main_c2 = st.columns([1, 3])
 p_type_key = "verbal"
 
 with main_c1:
+    # --- Load a diagram ---
+    with st.expander("Load a diagram", expanded=False):
+        uploaded_file = st.file_uploader(
+            "Load .albura file",
+            type=["albura", "json"],
+            key=get_key("file_uploader"),
+            help="Load a previously saved .albura file to continue editing"
+        )
+        if uploaded_file is not None:
+            if load_albura_file(uploaded_file):
+                st.success("File loaded successfully!")
+                st.rerun()
+
     st.subheader("Constituents")
 
     # -------------------------
     # 1) NUCLEUS
     # -------------------------
     with st.expander("1. Nucleus", expanded=False):
+        # Determine default pred_type from loaded data
+        loaded_pred_type = ld("pred_type", "verbal")
+        default_pred_index = 0 if loaded_pred_type == "verbal" else 1
+        
         pred_type = st.radio(
             "Type", 
             ["Predicative", "Attributive"], 
             horizontal=True, 
             key=get_key("pred_type"),
+            index=default_pred_index,
             help="Predicative: Verbal predicates. Attributive: Copular constructions (AUX + PRED)."
         )
 
@@ -1062,19 +1202,19 @@ with main_c1:
 
         if pred_type == "Predicative":
             c1, c2 = st.columns([2, 1])
-            nucleus_data["text"] = c1.text_input("Data", key=get_key("nuc_txt"))
-            nucleus_data["pos"] = c2.text_input("PoS", key=get_key("nuc_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
+            nucleus_data["text"] = c1.text_input("Data", value=ld("nucleus.text"), key=get_key("nuc_txt"))
+            nucleus_data["pos"] = c2.text_input("PoS", value=ld("nucleus.pos"), key=get_key("nuc_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
             p_type_key = "verbal"
         else:
             st.markdown("**AUX**")
             c1, c2 = st.columns([2, 1])
-            copula_data["text"] = c1.text_input("Data", key=get_key("aux_txt"))
-            copula_data["pos"] = c2.text_input("PoS", key=get_key("aux_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
+            copula_data["text"] = c1.text_input("Data", value=ld("copula.text"), key=get_key("aux_txt"))
+            copula_data["pos"] = c2.text_input("PoS", value=ld("copula.pos"), key=get_key("aux_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
 
             st.markdown("**PRED**")
             c3, c4 = st.columns([2, 1])
-            attribute_data["text"] = c3.text_input("Data", key=get_key("attr_txt"))
-            attribute_data["pos"] = c4.text_input("PoS", key=get_key("attr_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
+            attribute_data["text"] = c3.text_input("Data", value=ld("attribute.text"), key=get_key("attr_txt"))
+            attribute_data["pos"] = c4.text_input("PoS", value=ld("attribute.pos"), key=get_key("attr_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
 
             st.markdown("---")
             st.markdown("**Constituents between AUX and PRED**")
@@ -1082,7 +1222,7 @@ with main_c1:
             num_between = st.number_input(
                 "Number of items", 
                 min_value=0, 
-                value=0, 
+                value=ld_len("items_between"), 
                 key=get_key("num_between"),
                 help="Use this for arguments or adjuncts located between the copula and the attribute (e.g., 'is **she often** happy?')."
 )
@@ -1152,13 +1292,27 @@ with main_c1:
         }
 
         st.caption("**Pre-nuclear**")
-        num_pre = st.number_input("Number of items", min_value=0, value=0, key=get_key("num_pre"))
+        num_pre = st.number_input("Number of items", min_value=0, value=ld_len("items_pre"), key=get_key("num_pre"))
 
         items_pre_data = []
         for i in range(num_pre):
             st.markdown(f"**Item {i+1}**")
-            conn_type_raw = st.selectbox("Type", list(conn_map.keys()), key=get_key(f"pre_c_{i}"))
+            
+            # Get loaded values for this item
+            loaded_conn = ld_item("items_pre", i, "conn_type", "Arg")
+            conn_type_options = list(conn_map.keys())
+            conn_type_default = 0
+            for idx, (k, v) in enumerate(conn_map.items()):
+                if v[0] == loaded_conn:
+                    conn_type_default = idx
+                    break
+            
+            conn_type_raw = st.selectbox("Type", conn_type_options, index=conn_type_default, key=get_key(f"pre_c_{i}"))
             code, def_lbl = conn_map[conn_type_raw]
+
+            # Get loaded arg_type
+            loaded_arg_type = ld_item("items_pre", i, "arg_type", "Syntactic")
+            arg_type_default = 0 if loaded_arg_type != "Morphological" else 1
 
             arg_type = None
             if conn_type_raw == "Argument":
@@ -1166,26 +1320,31 @@ with main_c1:
                     "Argument type",
                     ["Syntactic", "Morphological"],
                     horizontal=True,
+                    index=arg_type_default,
                     key=get_key(f"pre_argtype_{i}"),
                     help="Syntactic: Standard phrasal arguments (RP, PP). Morphological: Affixes or clitics attached to the COREw/NUCw nodes."
                 )
 
             c1, c2, c3 = st.columns([2, 1, 1])
 
-            txt = c1.text_input("Data", key=get_key(f"pre_t_{i}"))
+            txt = c1.text_input("Data", value=ld_item("items_pre", i, "text"), key=get_key(f"pre_t_{i}"))
 
             morph_form = None
             if conn_type_raw == "Argument" and arg_type == "Morphological":
+                loaded_morph = ld_item("items_pre", i, "morph_form", "Affix")
+                morph_default = 0 if loaded_morph != "Clitic" else 1
                 morph_form = c2.selectbox(
                     "Label",
                     ["Affix", "Clitic"],
+                    index=morph_default,
                     key=get_key(f"pre_morphform_{i}")
                 )
                 lbl = "AFF" if morph_form == "Affix" else "CL"
             else:
-                lbl = c2.text_input("Label", value=def_lbl, key=get_key(f"pre_l_{i}_{code}"))
+                loaded_lbl = ld_item("items_pre", i, "label", def_lbl)
+                lbl = c2.text_input("Label", value=loaded_lbl, key=get_key(f"pre_l_{i}_{code}"))
 
-            pos = c3.text_input("PoS", key=get_key(f"pre_p_{i}"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
+            pos = c3.text_input("PoS", value=ld_item("items_pre", i, "pos"), key=get_key(f"pre_p_{i}"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
 
             items_pre_data.append({
                 "label": lbl,
@@ -1199,13 +1358,27 @@ with main_c1:
         st.markdown("---")
 
         st.caption("**Post-nuclear**")
-        num_post = st.number_input("Number of items", min_value=0, value=0, key=get_key("num_post"))
+        num_post = st.number_input("Number of items", min_value=0, value=ld_len("items_post"), key=get_key("num_post"))
 
         items_post_data = []
         for i in range(num_post):
             st.markdown(f"**Item {i+1}**")
-            conn_type_raw = st.selectbox("Type", list(conn_map.keys()), key=get_key(f"post_c_{i}"))
+            
+            # Get loaded values for this item
+            loaded_conn = ld_item("items_post", i, "conn_type", "Arg")
+            conn_type_options = list(conn_map.keys())
+            conn_type_default = 0
+            for idx, (k, v) in enumerate(conn_map.items()):
+                if v[0] == loaded_conn:
+                    conn_type_default = idx
+                    break
+            
+            conn_type_raw = st.selectbox("Type", conn_type_options, index=conn_type_default, key=get_key(f"post_c_{i}"))
             code, def_lbl = conn_map[conn_type_raw]
+
+            # Get loaded arg_type
+            loaded_arg_type = ld_item("items_post", i, "arg_type", "Syntactic")
+            arg_type_default = 0 if loaded_arg_type != "Morphological" else 1
 
             arg_type = None
             if conn_type_raw == "Argument":
@@ -1213,26 +1386,31 @@ with main_c1:
                     "Argument type",
                     ["Syntactic", "Morphological"],
                     horizontal=True,
+                    index=arg_type_default,
                     key=get_key(f"post_argtype_{i}"),
                     help="Syntactic: Standard phrasal arguments (RP, PP). Morphological: Affixes or clitics attached to the COREw/NUCw nodes."
                 )
 
             c1, c2, c3 = st.columns([2, 1, 1])
 
-            txt = c1.text_input("Data", key=get_key(f"post_t_{i}"))
+            txt = c1.text_input("Data", value=ld_item("items_post", i, "text"), key=get_key(f"post_t_{i}"))
 
             morph_form = None
             if conn_type_raw == "Argument" and arg_type == "Morphological":
+                loaded_morph = ld_item("items_post", i, "morph_form", "Affix")
+                morph_default = 0 if loaded_morph != "Clitic" else 1
                 morph_form = c2.selectbox(
                     "Label",
                     ["Affix", "Clitic"],
+                    index=morph_default,
                     key=get_key(f"post_morphform_{i}")
                 )
                 lbl = "AFF" if morph_form == "Affix" else "CL"
             else:
-                lbl = c2.text_input("Label", value=def_lbl, key=get_key(f"post_l_{i}_{code}"))
+                loaded_lbl = ld_item("items_post", i, "label", def_lbl)
+                lbl = c2.text_input("Label", value=loaded_lbl, key=get_key(f"post_l_{i}_{code}"))
 
-            pos = c3.text_input("PoS", key=get_key(f"post_p_{i}"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
+            pos = c3.text_input("PoS", value=ld_item("items_post", i, "pos"), key=get_key(f"post_p_{i}"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
 
             items_post_data.append({
                 "label": lbl,
@@ -1250,9 +1428,9 @@ with main_c1:
         def input_peri(label_ui, key_prefix, default_lbl="XP"):
             st.markdown(f"**{label_ui}**")
             c1, c2, c3 = st.columns([2, 1, 1])
-            txt = c1.text_input("Data", key=get_key(f"{key_prefix}_txt"))
-            lbl = c2.text_input("Label", default_lbl, key=get_key(f"{key_prefix}_lbl"))
-            pos = c3.text_input("PoS", key=get_key(f"{key_prefix}_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
+            txt = c1.text_input("Data", value=ld(f"{key_prefix}.text"), key=get_key(f"{key_prefix}_txt"))
+            lbl = c2.text_input("Label", value=ld(f"{key_prefix}.label", default_lbl), key=get_key(f"{key_prefix}_lbl"))
+            pos = c3.text_input("PoS", value=ld(f"{key_prefix}.pos"), key=get_key(f"{key_prefix}_pos"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
             return {"label": lbl, "text": txt, "pos": pos}
 
         prdp = input_peri("PrDP", "prdp", "XP")
@@ -1267,7 +1445,7 @@ with main_c1:
     with st.expander("4. Extra-Core Slots", expanded=False):
         st.caption("(drawn as CORE-level slots attached to CL)")
 
-        num_excs = st.number_input("Number of items", min_value=0, value=0, key=get_key("num_excs"))
+        num_excs = st.number_input("Number of items", min_value=0, value=ld_len("extra_core_slots"), key=get_key("num_excs"))
 
         extra_core_slots_data = []
         base_reference_items = []
@@ -1305,14 +1483,17 @@ with main_c1:
             st.markdown(f"**Item {i+1}**")
 
             c1, c2, c3 = st.columns([2, 1, 1])
-            txt = c1.text_input("Data", key=get_key(f"excs_t_{i}"))
-            lbl = c2.text_input("Label", value="XP", key=get_key(f"excs_l_{i}"))
-            pos = c3.text_input("PoS", key=get_key(f"excs_p_{i}"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
+            txt = c1.text_input("Data", value=ld_item("extra_core_slots", i, "text"), key=get_key(f"excs_t_{i}"))
+            lbl = c2.text_input("Label", value=ld_item("extra_core_slots", i, "label", "XP"), key=get_key(f"excs_l_{i}"))
+            pos = c3.text_input("PoS", value=ld_item("extra_core_slots", i, "pos"), key=get_key(f"excs_p_{i}"), help="Optional Part of Speech or category tag (e.g., N, P, Adv). It will be rendered between the node label and the word.")
 
             c4, c5 = st.columns([1, 1])
+            loaded_pos = ld_item("extra_core_slots", i, "position", "right")
+            pos_default = 0 if loaded_pos == "left" else 1
             position = c4.selectbox(
                 "Position", 
                 ["Left of", "Right of"], 
+                index=pos_default,
                 key=get_key(f"excs_pos_{i}"),
                 help="Determines the linear order of the Extra-Core Slot relative to the reference item selected."
             )
@@ -1354,7 +1535,7 @@ with main_c1:
     with st.expander("Realization forms", expanded=False):
         st.caption("If operators are expressed in items not present in the constituent projection, enter them here.")
 
-        num_realizations = st.number_input("Number of items", min_value=0, value=0, key=get_key("num_realizations"))
+        num_realizations = st.number_input("Number of items", min_value=0, value=ld_len("realization_forms"), key=get_key("num_realizations"))
 
         realization_forms_data = []
 
@@ -1401,11 +1582,14 @@ with main_c1:
 
                 form_text = c1.text_input(
                     "Form",
+                    value=ld_item("realization_forms", i, "text"),
                     key=get_key(f"real_text_{i}"),
                     help="Any item other than an argument or adjunct that serves as realization of an operator, such as affixes or particles (e.g., -able, will, Ø, -ing)",
                 )
 
-                position = c2.selectbox("Position", ["Left of", "Right of"], key=get_key(f"real_pos_{i}"))
+                loaded_real_pos = ld_item("realization_forms", i, "position", "right")
+                real_pos_default = 0 if loaded_real_pos == "left" else 1
+                position = c2.selectbox("Position", ["Left of", "Right of"], index=real_pos_default, key=get_key(f"real_pos_{i}"))
 
                 current_references = reference_items.copy()
                 for j in range(i):
@@ -1415,7 +1599,15 @@ with main_c1:
 
                 if current_references:
                     reference_labels = [item[0] for item in current_references]
-                    reference = st.selectbox("Reference item", reference_labels, key=get_key(f"real_ref_{i}"))
+                    reference_codes = [item[1] for item in current_references]
+                    
+                    # Get loaded reference and find its index
+                    loaded_ref = ld_item("realization_forms", i, "reference", "")
+                    ref_default_idx = 0
+                    if loaded_ref in reference_codes:
+                        ref_default_idx = reference_codes.index(loaded_ref)
+                    
+                    reference = st.selectbox("Reference item", reference_labels, index=ref_default_idx, key=get_key(f"real_ref_{i}"))
 
                     selected_idx = reference_labels.index(reference)
                     reference_code = current_references[selected_idx][1]
@@ -1435,26 +1627,43 @@ with main_c1:
     operators_data = []
 
     def operator_box(title, layer_code, ops_list, key_prefix, realization_forms):
+        # Get loaded operators for this layer
+        loaded_ops = ld_operators_by_layer(layer_code)
+        
         with st.expander(title, expanded=False):
-            n = st.number_input("Number of operators", min_value=0, value=0, key=get_key(f"{key_prefix}_n"))
+            n = st.number_input("Number of operators", min_value=0, value=len(loaded_ops), key=get_key(f"{key_prefix}_n"))
 
             for i in range(n):
                 st.markdown(f"**Operator {i+1}**")
+                
+                # Get loaded values for this operator
+                loaded_op = loaded_ops[i] if i < len(loaded_ops) else {}
+                loaded_op_type = loaded_op.get("operator", "")
+                loaded_op_value = loaded_op.get("value", "")
+                loaded_op_side = loaded_op.get("side", "Right")
+                loaded_op_targets = loaded_op.get("targets", [])
+                
+                # Find index of loaded operator type in ops_list
+                op_type_index = 0
+                if loaded_op_type in ops_list:
+                    op_type_index = ops_list.index(loaded_op_type)
 
-                op_type = st.selectbox("Type", options=ops_list, key=get_key(f"{key_prefix}_type_{i}"))
+                op_type = st.selectbox("Type", options=ops_list, index=op_type_index, key=get_key(f"{key_prefix}_type_{i}"))
 
                 c1, c2 = st.columns([1, 1])
 
                 op_value = c1.text_input(
                     "Value", 
+                    value=loaded_op_value,
                     key=get_key(f"{key_prefix}_value_{i}"),
                     help="The grammatical value of the operator (e.g., 'PAST', 'PROGR', 'DECL')."
                 )
 
+                side_index = 0 if loaded_op_side == "Right" else 1
                 label_side = c2.selectbox(
                     "Label position", 
                     options=["Right", "Left"], 
-                    index=0, 
+                    index=side_index, 
                     key=get_key(f"{key_prefix}_side_{i}"),
                     help="Determines if the operator label appears on the left or right side of the projection spine."
                 )
@@ -1499,9 +1708,20 @@ with main_c1:
                         target_options.append((f"Realization form {idx+1}: {form['text']}", f"real_{idx}"))
 
                 target_labels = [opt[0] for opt in target_options]
+                target_codes_list = [opt[1] for opt in target_options]
+                
+                # Find default selected targets based on loaded data
+                default_targets = []
+                for target_code in loaded_op_targets:
+                    if target_code in target_codes_list:
+                        idx = target_codes_list.index(target_code)
+                        if idx > 0:  # Skip "None" option
+                            default_targets.append(target_labels[idx])
+                
                 targets = st.multiselect(
                     "Links to",
                     options=target_labels[1:],
+                    default=default_targets,
                     key=get_key(f"{key_prefix}_target_{i}"),
                     help="Select the constituent(s) or realization form(s) this operator links to. They can be more than one. This will draw the dashed connection lines.",
                 )
@@ -1569,11 +1789,23 @@ with main_c2:
 
         graph, pending_connections, node_mapping = draw_lsc_tree(data)
 
-        btn_col1, btn_col2, btn_col3 = st.columns([0.12, 0.76, 0.12])
+        btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 1])
+        with btn_col1:
+            # Save .albura button
+            albura_json = json.dumps(data, ensure_ascii=False, indent=2)
+            st.download_button(
+                "Save diagram as .albura",
+                albura_json,
+                "diagram.albura",
+                "application/json",
+                use_container_width=True,
+                help="Save diagram as .albura file for later editing"
+            )
+        
         with btn_col3:
             st.button(
-                "New",
-                width="stretch",
+                "Create new diagram",
+                use_container_width=True,
                 on_click=reset_state,
                 help="Generate new diagram",
             )
@@ -1599,22 +1831,22 @@ with main_c2:
             except ImportError:
                 pass
 
-            with btn_col1:
+            with btn_col2:
                 if png_data:
                     st.download_button(
-                        "Download",
+                        "Export diagram as .png",
                         png_data,
                         "albura_tree.png",
                         "image/png",
-                        width="stretch",
+                        use_container_width=True,
                     )
                 else:
                     st.download_button(
-                        "Download",
+                        "Export diagram as .svg",
                         svg_code,
                         "albura_tree.svg",
                         "image/svg+xml",
-                        width="stretch",
+                        use_container_width=True,
                     )
 
             svg_view = re.sub(r'(width|height)="[^"]*"', "", svg_code)
@@ -1645,4 +1877,4 @@ with main_c2:
             st.error(f"Technical error: {e}")
 
     else:
-        st.info("Fill in the data to begin")
+        st.info("Fill in the data to begin, or load a previous .albura diagram to continue editing")
