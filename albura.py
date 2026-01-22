@@ -1167,7 +1167,7 @@ with main_c1:
     with st.expander("Load a diagram", expanded=False):
         uploaded_file = st.file_uploader(
             "Load .albura file",
-            type=["albura", "json"],
+            type=["albura", "json", "application/json", "text/plain"],
             key=get_key("file_uploader"),
             help="Load a previously saved .albura file to continue editing"
         )
