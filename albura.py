@@ -1744,19 +1744,34 @@ with main_c1:
         st.page_link("pages/01_User_Manual.py", label="User Manual", icon="📘")
 
     st.markdown("---")
-    st.caption("by Carlos González Vergara (__cgonzalv@uc.cl__)")
 
+    # Footer: logo cgv.tools + badge CC en la misma línea, firma debajo
     try:
+        cgv_logo_path = Path(__file__).parent / "cgv-tools.png"
         cc_icon_path = Path(__file__).parent / "cc_icon.png"
+        with open(cgv_logo_path, "rb") as f:
+            cgv_data = base64.b64encode(f.read()).decode()
         with open(cc_icon_path, "rb") as f:
-            img_data = base64.b64encode(f.read()).decode()
+            cc_data = base64.b64encode(f.read()).decode()
         st.markdown(
-            f'<a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">'
-            f'<img src="data:image/png;base64,{img_data}" alt="CC BY-NC-ND 4.0" width="88"></a>',
+            f'''
+            <div style="display: flex; align-items: center; justify-content: center; gap: 18px; margin-top: 8px;">
+                <a href="https://cgv.tools" target="_blank">
+                    <img src="data:image/png;base64,{cgv_data}" alt="cgv.tools" height="22" style="opacity: 0.85;">
+                </a>
+                <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">
+                    <img src="data:image/png;base64,{cc_data}" alt="CC BY-NC-ND 4.0" height="28">
+                </a>
+            </div>
+            <p style="text-align: center; color: #6c757d; font-size: 0.85rem; margin-top: 10px;">
+                Carlos González Vergara (<strong>cgonzalv@uc.cl</strong>)
+            </p>
+            ''',
             unsafe_allow_html=True,
         )
     except Exception:
-        st.markdown("[CC BY 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)")
+        st.caption("by Carlos González Vergara (__cgonzalv@uc.cl__)")
+        st.markdown("[cgv.tools](https://cgv.tools) · [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)")
 
 
 # ==========================================
