@@ -1182,7 +1182,7 @@ with main_c1:
     # -------------------------
     # 1) NUCLEUS
     # -------------------------
-    with st.expander("1. Nucleus", expanded=False):
+    with st.expander("Nucleus", expanded=False):
         # Determine default pred_type from loaded data
         loaded_pred_type = ld("pred_type", "verbal")
         default_pred_index = 0 if loaded_pred_type == "verbal" else 1
@@ -1282,7 +1282,7 @@ with main_c1:
     # -------------------------
     # 2) ARGUMENTS / ADJUNCTS
     # -------------------------
-    with st.expander("2. Arguments and adjuncts", expanded=False):
+    with st.expander("Arguments and adjuncts", expanded=False):
         st.caption("(from leftmost to rightmost)")
 
         conn_map = {
@@ -1425,7 +1425,7 @@ with main_c1:
     # -------------------------
     # 3) TOPICS / FOCI
     # -------------------------
-    with st.expander("3. Topics and foci", expanded=False):
+    with st.expander("Topics and foci", expanded=False):
         def input_peri(label_ui, key_prefix, default_lbl="XP"):
             st.markdown(f"**{label_ui}**")
             c1, c2, c3 = st.columns([2, 1, 1])
@@ -1443,7 +1443,7 @@ with main_c1:
     # -------------------------
     # 4) EXTRA-CORE SLOTS
     # -------------------------
-    with st.expander("4. Extra-Core Slots", expanded=False):
+    with st.expander("Extra-Core Slots", expanded=False):
         st.caption("(drawn as CORE-level slots attached to CL)")
 
         num_excs = st.number_input("Number of items", min_value=0, value=ld_len("extra_core_slots"), key=get_key("num_excs"))
