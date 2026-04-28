@@ -8,6 +8,7 @@ from pathlib import Path
 
 st.set_page_config(
     page_title="Albura - RRG LSC Diagram Assistant",
+    page_icon="favicon.png",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
